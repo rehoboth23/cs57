@@ -1,4 +1,4 @@
-source = pset1
+source = pset
 
 all: test
 
