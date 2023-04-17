@@ -13,16 +13,16 @@ extern int yydebug;
 
 %union{
 	int ival;
-	char * var_name;
+	char *var_name;
 	astNode *node_ptr;
-	vector<astNode *> *program_vec;
+	vector<astNode *> *vec_ptr;
 }
 
 %token TYPE IF ELSE WHILE LT GT LTE GTE EQ NEQ ADD SUB MUL DIV EXTERN
 %token <ival> NUM
 %token <var_name> VAR
 
-%type <program_vec> program statements if_statment function_definition variable_declarations
+%type <vec_ptr> program statements if_statment function_definition variable_declarations
 %type <node_ptr> code function if_else loop else_statement code_block statement variable_declaration assignment function_call expr arithmetic condition parameter operand unary
 
 %left ADD SUB
@@ -53,6 +53,7 @@ function: function_definition code_block {$$ = createFunc(((astDecl *)$1->at(0))
 // a function definition
 function_definition: TYPE VAR '(' TYPE ')' {
 											$$ = new vector<astNode*>();
+											printf(" $2 -> %s\n", $2);
 											astNode* decl = createDecl($2);
 											$$->push_back(decl);
 											astNode* var = createVar("");
@@ -60,6 +61,7 @@ function_definition: TYPE VAR '(' TYPE ')' {
 										}
 										| TYPE VAR '(' TYPE VAR ')' {
 											$$ = new vector<astNode*>();
+											printf(" $2 -> %s\n", $$);
 											astNode* decl = createDecl($2);
 											$$->push_back(decl);
 											astNode* var = createVar($5);
