@@ -10,3 +10,4 @@ sample_miniC*
 *out*.c
 *TRACE*
 .DS_Store
+/ast
