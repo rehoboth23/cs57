@@ -1,6 +1,7 @@
 %{
 #include <stdio.h>
 #include <math.h>
+#include "ast.h"
 #include "y.tab.h"
 %}
 
@@ -12,7 +13,8 @@ variable 				{letter}{alphanum_us}*
 number					[0-9]+
 empty 					^[ \t]*\n$
 %%
-"extern"					{printf("%s", yytext);}
+"extern"					{printf("%s", yytext);
+				 return EXTERN;}
 
 "int"							{printf("%s", yytext); 
 				 return TYPE;}

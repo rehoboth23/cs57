@@ -1,6 +1,7 @@
 %{
 #include <stdio.h>
 #include "ast.h"
+#include "vector"
 void yyerror(const char *);
 extern int yylex();
 extern int yylex_destroy();
@@ -10,14 +11,14 @@ extern char* yytext;
 extern int yydebug;
 %}
 
-%union {
+%union{
 	int ival;
-	char* var_name;
-	astNode* node_ptr;
+	char * var_name;
+	astNode *node_ptr;
 	vector<astNode *> *program_vec;
 }
 
-%token TYPE IF ELSE WHILE LT GT LTE GTE EQ NEQ ADD SUB MUL DIV
+%token TYPE IF ELSE WHILE LT GT LTE GTE EQ NEQ ADD SUB MUL DIV EXTERN
 %token <ival> NUM
 %token <var_name> VAR
 
@@ -122,7 +123,7 @@ statement: assignment {$$ = $1;}
 					| if_else {$$ = $1;}
 					| loop {$$ = $1;}
 					| code_block {$$ = $1;}
-					| function_definition ';' {$$ = createFunc(((astDecl *)$1->at(0))->name, $1->at(1), nullptr);}
+					| EXTERN function_definition ';' {$$ = createFunc(((astDecl *)$2->at(0))->name, $2->at(1), nullptr);}
 
 variable_declarations: variable_declarations variable_declaration {
 												$$ = $1;
