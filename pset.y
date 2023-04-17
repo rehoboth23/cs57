@@ -1,5 +1,6 @@
 %{
 #include <stdio.h>
+#include <iostream>
 #include "ast.h"
 #include "vector"
 void yyerror(const char *);
@@ -13,17 +14,17 @@ extern int yydebug;
 
 %union{
 	int ival;
-	char *var_name;
+	char *vname;
 	astNode *node_ptr;
 	vector<astNode *> *vec_ptr;
 }
 
 %token TYPE IF ELSE WHILE LT GT LTE GTE EQ NEQ ADD SUB MUL DIV EXTERN
 %token <ival> NUM
-%token <var_name> VAR
+%token <vname> VAR
 
-%type <vec_ptr> program statements if_statment function_definition variable_declarations
-%type <node_ptr> code function if_else loop else_statement code_block statement variable_declaration assignment function_call expr arithmetic condition parameter operand unary
+%type <vec_ptr>  statements variable_declarations
+%type <node_ptr> program exters_token extern_print extern_read function function_definition if_else loop if_statment else_statement code_block statement variable_declaration assignment function_call expr arithmetic condition parameter operand unary
 
 %left ADD SUB
 %left MUL DIV
@@ -32,46 +33,44 @@ extern int yydebug;
 %nonassoc IFX
 %nonassoc ELSE
 %start program
+
 %%
 // final reduction state
+program: exters_token exters_token function {
+	$$ = createProg($1, $2, $3);
+	cout << endl;
+	printNode($$, 0);
+	freeNode($$);
+}
 
-program: program code {
-					$$ = $1;
-					$$->push_back($2);
-				}
-				| code {
-					$$ = new vector<astNode*>();
-					$$->push_back($1);
-				}
+exters_token: extern_print
+						| extern_read
 
-code: function {$$ = $1;}
-			| statement {$$ = $1;}
+extern_print: EXTERN TYPE VAR '(' TYPE ')' ';' {
+	$$ = createExtern($3);
+	free($3);
+}
+
+extern_read: EXTERN TYPE VAR '(' ')' ';' {
+	$$ = createExtern($3);
+	free($3);
+}
 
 // entire function
-function: function_definition code_block {$$ = createFunc(((astDecl *)$1->at(0))->name, $1->at(1), $2);}
+function: function_definition code_block {
+	$$ = $1;
+	$$->func.body = $2;
+}
 
 // a function definition
-function_definition: TYPE VAR '(' TYPE ')' {
-											$$ = new vector<astNode*>();
-											printf(" $2 -> %s\n", $2);
-											astNode* decl = createDecl($2);
-											$$->push_back(decl);
-											astNode* var = createVar("");
-											$$->push_back(var);
-										}
-										| TYPE VAR '(' TYPE VAR ')' {
-											$$ = new vector<astNode*>();
-											printf(" $2 -> %s\n", $$);
-											astNode* decl = createDecl($2);
-											$$->push_back(decl);
-											astNode* var = createVar($5);
-											$$->push_back(var);
+function_definition: TYPE VAR '(' TYPE VAR ')' {
+											$$ = createFunc($2, createVar($5), nullptr);
+											free($2);
+											free($5);
 										}
 										| TYPE VAR '(' ')' {
-											$$ = new vector<astNode*>();
-											astNode* decl = createDecl($2);
-											$$->push_back(decl);
-											$$->push_back(nullptr);
+											$$ = createFunc($2, nullptr, nullptr);
+											free($2);
 										}
 
 // a loop (while) block
@@ -79,17 +78,16 @@ loop: WHILE '(' condition ')' code_block {$$ = createWhile($3, $5);}
 
 // if else block with proper precedence
 if_else: if_statment %prec IFX {
-					$$ = createIf($1->at(0), $1->at(1), nullptr);
+					$$ = $1;
 				}
 				| if_statment else_statement {
-					$$ = createIf($1->at(0), $1->at(1), $2);
+					$$ = $1;
+					$$->stmt.ifn.else_body = $2;
 				}
 
 // if statement
 if_statment: IF '(' condition ')' statement {
-	$$ = new vector<astNode*>();
-	$$->push_back($3);
-	$$->push_back($5);
+	$$ = createIf($3, $5, nullptr);
 }
 
 // else statement
@@ -100,6 +98,8 @@ else_statement: ELSE statement {
 // code block with var declarations at the start
 code_block: block_start variable_declarations statements block_end {
 	$2->insert($2->end(), $3->begin(), $3->end());
+	$3->clear();
+	delete($3);
 	$$ = createBlock($2);
 }
 
@@ -125,7 +125,6 @@ statement: assignment {$$ = $1;}
 					| if_else {$$ = $1;}
 					| loop {$$ = $1;}
 					| code_block {$$ = $1;}
-					| EXTERN function_definition ';' {$$ = createFunc(((astDecl *)$2->at(0))->name, $2->at(1), nullptr);}
 
 variable_declarations: variable_declarations variable_declaration {
 												$$ = $1;
@@ -134,15 +133,30 @@ variable_declarations: variable_declarations variable_declaration {
 											| {$$ = new vector<astNode*>();}
 
 // variable declaration with new line at the end
-variable_declaration: TYPE VAR ';' {$$ = createDecl($2);}
+variable_declaration: TYPE VAR ';' {
+	$$ = createDecl($2);
+	free($2);
+}
 
 // assignment to var
-assignment: VAR '=' expr ';' {$$ = createAsgn(createVar($1), $3);}
-					| VAR '=' function_call ';' {$$ = createAsgn(createVar($1), $3);}
+assignment: VAR '=' expr ';' {
+						$$ = createAsgn(createVar($1), $3);
+						free($1);
+					}
+					| VAR '=' function_call ';' {
+						$$ = createAsgn(createVar($1), $3);
+						free($1);
+					}
 
 // a function call
-function_call: VAR '(' expr ')' {$$ = createCall($1, $3);}
-							| VAR '(' ')' {$$ = createCall($1, nullptr);}
+function_call: VAR '(' expr ')' {
+								$$ = createCall($1, $3);
+								free($1);
+							}
+							| VAR '(' ')' {
+								$$ = createCall($1, nullptr);
+								free($1);
+							}
 
 expr: arithmetic {$$ = $1;}
 			| parameter {$$ = $1;}
@@ -166,7 +180,10 @@ parameter: operand {$$ = $1;}
 
 // operand can be number or variable
 operand: NUM {$$ = createCnst($1);}
-				| VAR {$$ = createVar($1);}
+				| VAR {
+					$$ = createVar($1);
+					free($1);
+				}
 
 // unary opwrations
 unary: SUB operand %prec UNARY {$$ = createUExpr($2, uminus);}
