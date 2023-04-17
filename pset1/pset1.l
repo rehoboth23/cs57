@@ -27,13 +27,13 @@ empty 					^[ \t]*\n$
 				 return WHILE;}
 
 "*" 							{printf("%s", yytext);
-				return yytext[0];}
+				return MUL;}
 "/" 							{printf("%s", yytext);
-				return yytext[0];}
+				return DIV;}
 "-" 							{printf("%s", yytext);
-				return yytext[0];}
+				return SUB;}
 "+" 				{printf("%s", yytext);
-				return yytext[0];}
+				return ADD;}
 
 "<" 							{printf("%s", yytext);
 				return LT;}
@@ -45,6 +45,8 @@ empty 					^[ \t]*\n$
 				return GTE;}
 "==" 							{printf("%s", yytext);
 				return EQ;}
+"!=" 							{printf("%s", yytext);
+				return NEQ;}
 
 "("								{printf("%s", yytext); 
 			 return yytext[0];}
