@@ -3,15 +3,10 @@ extern int read();
 
 int func(int i){
 	int a;
-	int b;
-
-	a = 0;
-	b = 0;
-
+	
   if (a < i){
-		read();
 		while (b < i){
-			b = -20 + a;
+			b = b + 20;
 		}
 		a = 10 + b;
 	}
@@ -19,5 +14,4 @@ int func(int i){
 		if (b < i) 
 			b = a;
 	}
-	return(1);
 }

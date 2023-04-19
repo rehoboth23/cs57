@@ -3,6 +3,8 @@
 #include <iostream>
 #include "ast.h"
 #include "vector"
+#include "scope.h"
+#include <assert.h>
 void yyerror(const char *);
 extern int yylex();
 extern int yylex_destroy();
@@ -10,21 +12,23 @@ extern FILE *yyin;
 extern int yylineno;
 extern char* yytext;
 extern int yydebug;
+
+scope_t *scope;
 %}
 
 %union{
 	int ival;
 	char *vname;
-	astNode *node_ptr;
+	astNode *nptr;
 	vector<astNode *> *vec_ptr;
 }
 
-%token TYPE IF ELSE WHILE LT GT LTE GTE EQ NEQ ADD SUB MUL DIV EXTERN
+%token TYPE IF ELSE WHILE LT GT LTE GTE EQ NEQ ADD SUB MUL DIV EXTERN RETURN
 %token <ival> NUM
 %token <vname> VAR
 
 %type <vec_ptr>  statements variable_declarations
-%type <node_ptr> program exters_token extern_print extern_read function function_definition if_else loop if_statment else_statement code_block statement variable_declaration assignment function_call expr arithmetic condition parameter operand unary
+%type <nptr> program exters_token extern_print extern_read function function_definition if_else loop if_statment else_statement code_block statement variable_declaration assignment function_call expr arithmetic condition parameter operand unary
 
 %left ADD SUB
 %left MUL DIV
@@ -38,8 +42,9 @@ extern int yydebug;
 // final reduction state
 program: exters_token exters_token function {
 	$$ = createProg($1, $2, $3);
-	cout << endl;
+	cout << endl << "/**" << endl;
 	printNode($$, 0);
+	cout << "*/" << endl;
 	freeNode($$);
 }
 
@@ -60,11 +65,15 @@ extern_read: EXTERN TYPE VAR '(' ')' ';' {
 function: function_definition code_block {
 	$$ = $1;
 	$$->func.body = $2;
+	endScope(scope);
 }
 
 // a function definition
 function_definition: TYPE VAR '(' TYPE VAR ')' {
-											$$ = createFunc($2, createVar($5), nullptr);
+											startScope(scope);
+											astNode *var = createVar($5);
+											addToScope(scope, $5);
+											$$ = createFunc($2, var, nullptr);
 											free($2);
 											free($5);
 										}
@@ -104,10 +113,14 @@ code_block: block_start variable_declarations statements block_end {
 }
 
 // code block start
-block_start: '{'
+block_start: '{' {
+	startScope(scope);
+}
 
 // code block end
-block_end: '}'
+block_end: '}' {
+	endScope(scope);
+}
 
 // multiple statements
 statements: statements statement {
@@ -120,11 +133,24 @@ statements: statements statement {
 					}
 
 // statement can be assignmemnt function call if_else loop or code block
-statement: assignment {$$ = $1;}
-					| function_call ';' {$$ = $1;}
-					| if_else {$$ = $1;}
-					| loop {$$ = $1;}
-					| code_block {$$ = $1;}
+statement: assignment {
+						$$ = $1;
+					}
+					| function_call ';' {
+						$$ = $1;
+					}
+					| if_else {
+						$$ = $1;
+					}
+					| loop {
+						$$ = $1;
+					}
+					| code_block {
+						$$ = $1;
+					}
+					| RETURN '(' expr ')' ';' {
+						$$ = createRet($3);
+					}
 
 variable_declarations: variable_declarations variable_declaration {
 												$$ = $1;
@@ -134,17 +160,29 @@ variable_declarations: variable_declarations variable_declaration {
 
 // variable declaration with new line at the end
 variable_declaration: TYPE VAR ';' {
+	bool exists = searchScope(scope, $2);
+	if (exists) cerr << " " << $2 << " is already decalred in scope ";
+
 	$$ = createDecl($2);
+	addToScope(scope, $2);
 	free($2);
 }
 
 // assignment to var
 assignment: VAR '=' expr ';' {
-						$$ = createAsgn(createVar($1), $3);
+						bool exists = searchScope(scope, $1);
+						if (!exists) cerr << " variable " << $1 << " is not decalred in scope ";
+
+						astNode *var = createVar($1);
+						$$ = createAsgn(var, $3);
 						free($1);
 					}
 					| VAR '=' function_call ';' {
-						$$ = createAsgn(createVar($1), $3);
+						bool exists = searchScope(scope, $1);
+						if (!exists) cerr << " variable " << $1 << " is not decalred in scope ";
+
+						astNode *var = createVar($1);
+						$$ = createAsgn(var, $3);
 						free($1);
 					}
 
@@ -181,6 +219,8 @@ parameter: operand {$$ = $1;}
 // operand can be number or variable
 operand: NUM {$$ = createCnst($1);}
 				| VAR {
+					bool exists = searchScope(scope, $1);
+					if (!exists) cerr << " variable " << $1 << " not decalred in scope ";
 					$$ = createVar($1);
 					free($1);
 				}
@@ -190,7 +230,8 @@ unary: SUB operand %prec UNARY {$$ = createUExpr($2, uminus);}
 %%
 
 int main(int argc, char** argv){
-	yydebug = 1;
+	scope = createScope();
+	// yydebug = 1;
 	if (argc == 2){
 		yyin = fopen(argv[1], "r");
 	}
@@ -198,6 +239,7 @@ int main(int argc, char** argv){
 	if (yyin != stdin)
 		fclose(yyin);
 	yylex_destroy();
+	deleteScope(scope);
 	return 0;
 }
 

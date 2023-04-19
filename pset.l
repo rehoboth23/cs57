@@ -18,6 +18,11 @@ empty 					^[ \t]*\n$
 	return EXTERN;
 }
 
+"return" {
+	printf("%s", yytext);
+	return RETURN;
+}
+
 "int" {
 	printf("%s", yytext);
 	return TYPE;

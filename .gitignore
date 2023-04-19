@@ -9,5 +9,6 @@ sample_miniC*
 *.output
 *out*.c
 *TRACE*
+*core*
 .DS_Store
 /ast
