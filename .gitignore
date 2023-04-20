@@ -11,4 +11,6 @@ sample_miniC*
 *TRACE*
 *core*
 .DS_Store
+ast.c
+ast.h
 /ast
