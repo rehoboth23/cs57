@@ -41,8 +41,6 @@ extern int yydebug;
 program: exters_token exters_token function {
 	$$ = createProg($1, $2, $3);
 	cout << endl << "/**" << endl;
-	printNode($$, 0);
-	cout << endl;
 	analyzer_t *analyzer = createAnalyzer();
 	analyze(analyzer, $$);
 	deleteAnalyzer(analyzer);
