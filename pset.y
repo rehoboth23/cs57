@@ -12,6 +12,7 @@ extern FILE *yyin;
 extern int yylineno;
 extern char* yytext;
 extern int yydebug;
+astNode *root;
 %}
 
 %union{
@@ -40,12 +41,7 @@ extern int yydebug;
 // final reduction state
 program: exters_token exters_token function {
 	$$ = createProg($1, $2, $3);
-	cout << endl << "/**" << endl;
-	analyzer_t *analyzer = createAnalyzer();
-	analyze(analyzer, $$);
-	deleteAnalyzer(analyzer);
-	cout << "*/" << endl;
-	freeNode($$);
+	root = $$;
 }
 
 exters_token: extern_print
@@ -219,6 +215,12 @@ int main(int argc, char** argv){
 		yyin = fopen(argv[1], "r");
 	}
 	yyparse();
+	cout << endl << "/**" << endl;
+	analyzer_t *analyzer = createAnalyzer();
+	analyze(analyzer, root);
+	deleteAnalyzer(analyzer);
+	cout << "*/" << endl;
+	freeNode(root);
 	if (yyin != stdin)
 		fclose(yyin);
 	yylex_destroy();
