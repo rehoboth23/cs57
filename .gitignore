@@ -15,4 +15,5 @@ ast.c
 ast.h
 /ast
 *.o
-~*
+llvm_parser
+*.gch
