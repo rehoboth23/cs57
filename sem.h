@@ -22,8 +22,10 @@ analyzer_t *createAnalyzer();
  * 
  * @param analyzer analyzer object
  * @param tree starting node
+ * @return true if entire analysis is succcessful
+ * @return false if analysius fails at any point
  */
-void analyze(analyzer_t *analyzer, astNode *tree);
+bool analyze(analyzer_t *analyzer, astNode *tree);
 
 /**
  * @brief delete analyzer

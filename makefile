@@ -1,6 +1,8 @@
 source = pset
+LLVMCODE = llvm_parser
+TEST = test1
 
-all: $(source).out
+all: $(LLVMCODE) llvm_file
 
 .PHONY: all test valgrind debug
 
@@ -33,5 +35,16 @@ valgrind:
 	valgrind --leak-check=full --show-leak-kinds=all ./$(source).out semantic_tests/p3.c &> out3.c
 	valgrind --leak-check=full --show-leak-kinds=all ./$(source).out semantic_tests/p4.c &> out4.c
 
+$(LLVMCODE): $(LLVMCODE).c opt.o
+	clang++ -g `llvm-config-15 --cflags` -I /usr/include/llvm-c-15/ -c $(LLVMCODE).c
+	clang++ `llvm-config-15 --cxxflags --ldflags --libs core` -I /usr/include/llvm-c-15/ $(LLVMCODE).o opt.o -o $@
+
+llvm_file: test_llvm/$(TEST).c
+	clang++ -S -emit-llvm test_llvm/$(TEST).c -o test_llvm/$(TEST).ll
+	./llvm_parser test_llvm/test1.ll &> TRACE
+
+opt.o:
+	clang++ -g `llvm-config-15 --cflags` -I /usr/include/llvm-c-15/ -c opt.h opt.c
+
 clean:
-	rm -rf lex.yy.c y.tab.c y.tab.h $(source).out y.output out*.c TRACE*
+	rm -rf lex.yy.c y.tab.c y.tab.h $(source).out y.output out*.c TRACE* *.ll $(LLVMCODE) opt.o
