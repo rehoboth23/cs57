@@ -15,4 +15,4 @@ ast.c
 ast.h
 /ast
 *.o
-*~
+~*
