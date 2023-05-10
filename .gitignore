@@ -14,5 +14,5 @@ sample_miniC*
 ast.c
 ast.h
 /ast
-*.0
+*.o
 *~
