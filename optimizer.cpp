@@ -21,8 +21,7 @@ using namespace std;
 string getInstructionString(llvm::Instruction &inst)
 {
 	string instStr;
-	llvm::raw_string_ostream rso(instStr);
-	inst.print(rso);
+	llvm::raw_string_ostream(instStr) << inst;
 	return instStr;
 }
 
@@ -191,7 +190,7 @@ void constantPropagation(llvm::Function &func, bool &change)
 			case llvm::Instruction::Load:
 				if (const1)
 				{
-					log(string{"CP  -> "} + getInstructionString(inst));
+					log(string{"CP -> "} + getInstructionString(inst));
 					// int64_t op1Val = LLVMConstIntGetSExtValue();
 					// LLVMValueRef newInstruction = LLVMConstInt(LLVMInt32Type(), op1Val, 1);
 					inst.replaceAllUsesWith(const1);
@@ -199,7 +198,7 @@ void constantPropagation(llvm::Function &func, bool &change)
 				}
 				else if (constants[op1] != nullptr)
 				{
-					log(string{"CP  -> "} + getInstructionString(inst));
+					log(string{"CP -> "} + getInstructionString(inst));
 					// LLVMValueRef newInstruction = LLVMConstInt(LLVMInt32Type(), op1Val, 1);
 					// LLVMReplaceAllUsesWith(inst, newInstruction);
 					// constants[op1]
