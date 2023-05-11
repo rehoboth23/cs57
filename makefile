@@ -2,6 +2,7 @@ source = pset
 LLVMCODE = llvm_optimizer
 TEST = test1
 OBJS = optimizer.o
+OS := $(shell uname -s)
 
 all: $(LLVMCODE) llvm_file
 
@@ -46,6 +47,14 @@ llvm_file: test_llvm/$(TEST).c
 run:
 	make all
 	./$(LLVMCODE) test_llvm/$(TEST).ll test_llvm/$(TEST)_out.ll
+
+ifeq ($(OS), Linux)
+debug_ll:
+	gdb --args ./$(LLVMCODE) test_llvm/$(TEST).ll test_llvm/$(TEST)_out.ll
+else
+debug_ll:
+	lldb -- ./$(LLVMCODE) test_llvm/$(TEST).ll test_llvm/$(TEST)_out.ll
+endif
 
 optimizer.o:
 	clang++ -g -D$(LOG) `llvm-config-15 --cflags` -I /usr/include/llvm-c-15/ -c optimizer.h optimizer.c
