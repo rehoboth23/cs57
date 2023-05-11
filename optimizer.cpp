@@ -280,7 +280,7 @@ void runOptimizer(string irInFileName, string irOutFileName)
 		}
 		else
 		{
-			module->dump();
+			module->print(llvm::outs(), nullptr);
 		}
 		module.reset();
 	}

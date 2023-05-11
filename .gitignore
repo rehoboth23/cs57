@@ -16,6 +16,6 @@ ast.h
 /ast
 *.o
 ~*
-llvm_optimizer
+optimizer
 *.gch
 *.ll
