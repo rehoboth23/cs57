@@ -267,25 +267,30 @@ void saveModule(unique_ptr<llvm::Module> &module, const string fileName)
 	module->print(os, nullptr);
 }
 
+void runOptimizer(string irInFileName, string irOutFileName)
+{
+	llvm::LLVMContext context;
+	unique_ptr<llvm::Module> module = createModule(irInFileName, context);
+	if (module)
+	{
+		optimizeModule(module);
+		if (irOutFileName.size())
+		{
+			saveModule(module, irOutFileName);
+		}
+		else
+		{
+			module->dump();
+		}
+		module.reset();
+	}
+}
+
 int main(int argc, char **argv)
 {
 	if (argc >= 2)
 	{
-		llvm::LLVMContext context;
-		unique_ptr<llvm::Module> module = createModule(string{argv[1]}, context);
-		if (module)
-		{
-			optimizeModule(module);
-			if (argc >= 3)
-			{
-				saveModule(module, argv[2]);
-			}
-			else
-			{
-				module->dump();
-			}
-			module.reset();
-		}
+		runOptimizer(string{argv[1]}, argc == 3 ? string{argv[2]} : string{""});
 	}
 	return 0;
 }

@@ -126,11 +126,6 @@ void deleteAnalyzer(analyzer_t *analyzer)
   free(analyzer);
 }
 
-/**
- * @brief analyze entire program
- *
- * @param tree starting node
- */
 void analyze(analyzer_t *analyzer, astNode *tree)
 {
   assert(analyzer != NULL);
@@ -183,6 +178,7 @@ void analyze(analyzer_t *analyzer, astNode *tree)
       if (searchAnalyzer(analyzer, tree->stmt.decl.name))
       {
         cerr << "variable " << tree->stmt.decl.name << " is already declared" << endl;
+        exit(1);
       }
       addToAnalyzer(analyzer, tree->stmt.decl.name);
       break;
@@ -194,6 +190,7 @@ void analyze(analyzer_t *analyzer, astNode *tree)
     if (!searchAnalyzer(analyzer, tree->var.name))
     {
       cerr << "variable " << tree->var.name << " is not declared" << endl;
+      exit(1);
     }
     break;
   case ast_bexpr:
