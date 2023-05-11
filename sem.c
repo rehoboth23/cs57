@@ -24,7 +24,6 @@ struct analyzer
   vector<set<char *, comp> *> *tables;
 };
 
-
 /**
  * @brief Create analyzer analyzer object
  *
@@ -79,7 +78,7 @@ void removeTopTable(analyzer_t *analyzer)
     free(variable);
   }
   analyzer->tables->pop_back();
-  delete(table);
+  delete (table);
 }
 
 /**
@@ -120,7 +119,7 @@ void deleteAnalyzer(analyzer_t *analyzer)
     {
       free(variable);
     }
-    delete(table);
+    delete (table);
   }
   delete (analyzer->tables);
   free(analyzer);
@@ -129,7 +128,8 @@ void deleteAnalyzer(analyzer_t *analyzer)
 void analyze(analyzer_t *analyzer, astNode *tree)
 {
   assert(analyzer != NULL);
-  if (tree == NULL) return;
+  if (tree == NULL)
+    return;
 
   switch (tree->type)
   {
@@ -138,7 +138,8 @@ void analyze(analyzer_t *analyzer, astNode *tree)
     break;
   case ast_func:
     addNewTable(analyzer);
-    if (tree->func.param != NULL) {
+    if (tree->func.param != NULL)
+    {
       addToAnalyzer(analyzer, tree->func.param->var.name);
     }
     analyze(analyzer, tree->func.body);

@@ -19,7 +19,7 @@ analyzer_t *createAnalyzer();
 
 /**
  * @brief analyze entire program
- * 
+ *
  * @param analyzer analyzer object
  * @param tree starting node
  */
