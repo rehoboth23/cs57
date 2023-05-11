@@ -17,4 +17,4 @@ ast.h
 *.o
 llvm_parser
 *.gch
-*.ll
+out.ll
