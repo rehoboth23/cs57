@@ -6,12 +6,9 @@ int func(int i)
 	int d;
 	a = 10;
 	b = 20;
-	b = 20;
-	b = 20;
-	b = 20;
-	b = 5;
 	c = a + b;
 	d = a + b;
+	b = 10;
 	if (a < 10)
 	{
 		a = i;
