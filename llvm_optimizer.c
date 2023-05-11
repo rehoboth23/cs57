@@ -42,11 +42,11 @@ void walkBasicblocks(LLVMValueRef function)
 				 basicBlock = LLVMGetNextBasicBlock(basicBlock))
 		{
 
-			eliminateCommonSubExpression(basicBlock, &change);
-			eliminateDeadCode(basicBlock, &change);
-			constantFolding(basicBlock, &change);
-			constantPropagation(function, &change);
+			// eliminateCommonSubExpression(basicBlock, &change);
+			// eliminateDeadCode(basicBlock, &change);
+			// constantFolding(basicBlock, &change);
 		}
+		// constantPropagation(function, &change);
 	} while (change);
 }
 

@@ -1,8 +1,9 @@
 source = pset
-LLVMCODE = llvm_optimizer
+LLVMCODE = optimizer
 TEST = test1
-OBJS = optimizer.o
+# OBJS = optimizer.o
 OS := $(shell uname -s)
+CLANG = clang++ --std=c++2a
 
 all: $(LLVMCODE) llvm_file
 
@@ -37,16 +38,24 @@ valgrind:
 	valgrind --leak-check=full --show-leak-kinds=all ./$(source).out semantic_tests/p3.c &> out3.c
 	valgrind --leak-check=full --show-leak-kinds=all ./$(source).out semantic_tests/p4.c &> out4.c
 
-$(LLVMCODE): $(LLVMCODE).c $(OBJS)
-	clang++ -g `llvm-config-15 --cflags` -I /usr/include/llvm-c-15/ -c $(LLVMCODE).c
-	clang++ `llvm-config-15 --cxxflags --ldflags --libs core` -I /usr/include/llvm-c-15/ $(LLVMCODE).o $(OBJS) -o $@
+$(LLVMCODE): $(LLVMCODE).cpp $(OBJS)
+	$(CLANG) -g -D$(LOG) `llvm-config-15 --cflags` -I /usr/include/llvm-c-15/ -c $(LLVMCODE).cpp
+	$(CLANG) `llvm-config-15 --cxxflags --ldflags --libs core` -I /usr/include/llvm-c-15/ $(LLVMCODE).o $(OBJS) -o $@
 
 llvm_file: test_llvm/$(TEST).c
-	clang++ -S -emit-llvm test_llvm/$(TEST).c -o test_llvm/$(TEST).ll
+	$(CLANG) -S -emit-llvm test_llvm/$(TEST).c -o test_llvm/$(TEST).ll
 
 run:
 	make all
 	./$(LLVMCODE) test_llvm/$(TEST).ll test_llvm/$(TEST)_out.ll
+
+# ifeq ($(LOG), LOG)
+# optimizer.o:
+# 	$(CLANG) -g -D$(LOG) `llvm-config-15 --cflags` -I /usr/include/llvm-c-15/ -c optimizer.h optimizer.cpp
+# else
+# optimizer.o:
+# 	$(CLANG) -g `llvm-config-15 --cflags` -I /usr/include/llvm-c-15/ -c optimizer.h optimizer.cpp
+# endif
 
 ifeq ($(OS), Linux)
 debug_ll:
@@ -55,9 +64,6 @@ else
 debug_ll:
 	lldb -- ./$(LLVMCODE) test_llvm/$(TEST).ll test_llvm/$(TEST)_out.ll
 endif
-
-optimizer.o:
-	clang++ -g -D$(LOG) `llvm-config-15 --cflags` -I /usr/include/llvm-c-15/ -c optimizer.h optimizer.c
 
 clean:
 	rm -rf lex.yy.c

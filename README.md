@@ -5,6 +5,6 @@
 ```
 # run using command
 make run
-# add environment vairable LOG to non empty string to get logs
+# add environment vairable LOG as "LOG" to get logs
 # change make file variable TEST to alter c file used to generate initial llvm ir
 ```

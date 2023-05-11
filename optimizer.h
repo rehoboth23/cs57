@@ -17,23 +17,38 @@
 #ifndef _OPT_H_
 #define _opt_h_
 
+#include <map>
+#include <vector>
+#include <string>
+#include <iostream>
+#include <llvm/IR/Type.h>
+#include <llvm/IR/Value.h>
+#include <llvm/IR/Module.h>
+#include <llvm/IR/LLVMContext.h>
+#include <llvm/IRReader/IRReader.h>
+#include <llvm/Support/SourceMgr.h>
+#include <llvm/Support/Error.h>
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/Instruction.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/BasicBlock.h"
+#include <llvm/IR/Function.h>
+#include <llvm/Support/raw_ostream.h>
+#include <llvm/Support/raw_os_ostream.h>
+#include <fstream>
+
+using namespace std;
+
+void log(string s)
+{
+#ifdef LOG
+  cout << s << endl;
+#endif
+}
+
 #define prt(x)         \
   if (x)               \
   {                    \
     printf("%s\n", x); \
   }
-
-#include <cstddef>
-#include <string>
-#include <iostream>
-#include <llvm-c/Types.h>
-#include <llvm-c/Core.h>
-#include <llvm-c/IRReader.h>
-#include <llvm-c/Transforms/Scalar.h>
-
-void eliminateCommonSubExpression(LLVMBasicBlockRef bb, bool *change);
-void eliminateDeadCode(LLVMBasicBlockRef bb, bool *change);
-void constantFolding(LLVMBasicBlockRef bb, bool *change);
-void constantPropagation(LLVMValueRef function, bool *change);
-void saveModule(LLVMModuleRef module, const char *filename);
 #endif
