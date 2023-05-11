@@ -1,17 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
-#include <iostream>
 #include <llvm-c/Core.h>
 #include <llvm-c/IRReader.h>
 #include <llvm-c/Types.h>
-#include "opt.h"
-
-#define prt(x)         \
-	if (x)               \
-	{                    \
-		printf("%s\n", x); \
-	}
+#include "optimizer.h"
 
 LLVMModuleRef createLLVMModel(char *filename)
 {

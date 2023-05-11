@@ -1,5 +1,5 @@
 /**
- * @file opt.h
+ * @file optimizer.c
  * @author Rehoboth Okorie
  * @brief optimizer with LLVM
  * constant folding
@@ -13,21 +13,25 @@
  * @copyright Copyright (c) 2023
  *
  */
-#include <cstddef>
 #include <stdio.h>
 #include <stdlib.h>
-#include <iostream>
-#include <string>
 #include <map>
 #include <vector>
-#include "opt.h"
+#include "optimizer.h"
 
 using namespace std;
 
+void log(string s)
+{
+#ifdef LOG
+  cout << s << endl;
+#endif
+}
+
 void eliminateCommonSubExpression(LLVMBasicBlockRef bb, bool *change)
 {
-	std::map<pair<LLVMValueRef, LLVMValueRef>, pair<LLVMOpcode, LLVMValueRef> *> commonSubexpressions;
-	std::map<LLVMValueRef, vector<pair<LLVMValueRef, LLVMValueRef>> *> opTrace;
+	map<pair<LLVMValueRef, LLVMValueRef>, pair<LLVMOpcode, LLVMValueRef> *> commonSubexpressions;
+	map<LLVMValueRef, vector<pair<LLVMValueRef, LLVMValueRef>> *> opTrace;
 
 	for (LLVMValueRef inst = LLVMGetFirstInstruction(bb); inst != NULL;)
 	{
@@ -58,7 +62,7 @@ void eliminateCommonSubExpression(LLVMBasicBlockRef bb, bool *change)
 			if (subExpr != nullptr && subExpr->first == opCode)
 			{
 				LLVMReplaceAllUsesWith(inst, subExpr->second);
-				cout << "CSE -> " << LLVMPrintValueToString(inst) << endl;
+				log(string{"CSE -> "} + LLVMPrintValueToString(inst));
 				*change = true;
 			}
 			else
@@ -93,10 +97,9 @@ void eliminateDeadCode(LLVMBasicBlockRef bb, bool *change)
 									opCode != LLVMBr &&
 									opCode != LLVMCall &&
 									opCode != LLVMRet);
-		// cout << "DCE" << endl;
 		if (LLVMGetFirstUse(inst) == NULL && check)
 		{
-			cout << "DCE -> " << LLVMPrintValueToString(inst) << endl;
+			log(string{"DCE -> "} + LLVMPrintValueToString(inst));
 			LLVMInstructionEraseFromParent(inst);
 			*change = true;
 		}
@@ -114,7 +117,7 @@ void constantFolding(LLVMBasicBlockRef bb, bool *change)
 		LLVMIntPredicate predicate;
 		if (LLVMIsAConstantInt(op1) && LLVMIsAConstantInt(op2))
 		{
-			cout << "CF  -> " << LLVMPrintValueToString(inst) << endl;
+			log(string{"CF  -> "} + LLVMPrintValueToString(inst));
 			LLVMValueRef newInstruction = NULL;
 			switch (opCode)
 			{
@@ -165,8 +168,7 @@ void constantPropagation(LLVMValueRef function, bool *change)
 				{
 					if (constants[op2] != nullptr && LLVMConstIntGetSExtValue(op1) == LLVMConstIntGetSExtValue(constants[op2]))
 					{
-						// LLVMReplaceAllUsesWith(op1, constants[op2]);
-						cout << "DFE/CP  -> " << LLVMPrintValueToString(inst) << endl;
+						log(string{"DFE/CP  -> "} + LLVMPrintValueToString(inst));
 						LLVMInstructionEraseFromParent(inst);
 						*change = true;
 					}
@@ -183,7 +185,7 @@ void constantPropagation(LLVMValueRef function, bool *change)
 			case LLVMLoad:
 				if (LLVMIsAConstantInt(op1))
 				{
-					cout << "CP  -> " << LLVMPrintValueToString(inst) << endl;
+					log(string{"CP  -> "} + LLVMPrintValueToString(inst));
 					int64_t op1Val = LLVMConstIntGetSExtValue(op1);
 					LLVMValueRef newInstruction = LLVMConstInt(LLVMInt32Type(), op1Val, 1);
 					LLVMReplaceAllUsesWith(inst, newInstruction);
@@ -191,7 +193,7 @@ void constantPropagation(LLVMValueRef function, bool *change)
 				}
 				else if (constants[op1] != nullptr)
 				{
-					cout << "CP  -> " << LLVMPrintValueToString(inst) << endl;
+					log(string{"CP  -> "} + LLVMPrintValueToString(inst));
 					int64_t op1Val = LLVMConstIntGetSExtValue(constants[op1]);
 					LLVMValueRef newInstruction = LLVMConstInt(LLVMInt32Type(), op1Val, 1);
 					LLVMReplaceAllUsesWith(inst, newInstruction);
@@ -209,7 +211,6 @@ void saveModule(LLVMModuleRef module, const char *filename)
 	char *errorMessage = NULL;
 	if (filename == NULL)
 	{
-		cout << "hello world" << endl;
 		LLVMDumpModule(module);
 		return;
 	}

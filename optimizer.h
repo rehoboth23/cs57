@@ -17,7 +17,15 @@
 #ifndef _OPT_H_
 #define _opt_h_
 
+#define prt(x)         \
+  if (x)               \
+  {                    \
+    printf("%s\n", x); \
+  }
+
 #include <cstddef>
+#include <string>
+#include <iostream>
 #include <llvm-c/Types.h>
 #include <llvm-c/Core.h>
 #include <llvm-c/IRReader.h>

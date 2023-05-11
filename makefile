@@ -1,6 +1,7 @@
 source = pset
-LLVMCODE = llvm_parser
+LLVMCODE = llvm_optimizer
 TEST = test1
+OBJS = optimizer.o
 
 all: $(LLVMCODE) llvm_file
 
@@ -35,16 +36,19 @@ valgrind:
 	valgrind --leak-check=full --show-leak-kinds=all ./$(source).out semantic_tests/p3.c &> out3.c
 	valgrind --leak-check=full --show-leak-kinds=all ./$(source).out semantic_tests/p4.c &> out4.c
 
-$(LLVMCODE): $(LLVMCODE).c opt.o
+$(LLVMCODE): $(LLVMCODE).c $(OBJS)
 	clang++ -g `llvm-config-15 --cflags` -I /usr/include/llvm-c-15/ -c $(LLVMCODE).c
-	clang++ `llvm-config-15 --cxxflags --ldflags --libs core` -I /usr/include/llvm-c-15/ $(LLVMCODE).o opt.o -o $@
+	clang++ `llvm-config-15 --cxxflags --ldflags --libs core` -I /usr/include/llvm-c-15/ $(LLVMCODE).o $(OBJS) -o $@
 
 llvm_file: test_llvm/$(TEST).c
 	clang++ -S -emit-llvm test_llvm/$(TEST).c -o test_llvm/$(TEST).ll
-	./llvm_parser test_llvm/test1.ll out.ll
 
-opt.o:
-	clang++ -g `llvm-config-15 --cflags` -I /usr/include/llvm-c-15/ -c opt.h opt.c
+run:
+	make all
+	./$(LLVMCODE) test_llvm/$(TEST).ll out.ll
+
+optimizer.o:
+	clang++ -g -D$(LOG) `llvm-config-15 --cflags` -I /usr/include/llvm-c-15/ -c optimizer.h optimizer.c
 
 clean:
 	rm -rf lex.yy.c
