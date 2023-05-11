@@ -181,16 +181,7 @@ void constantPropagation(llvm::Function &func, bool &change)
 			case llvm::Instruction::Store:
 				if (const1)
 				{
-					if (constants[op2] != nullptr && const1->getValue() == (constants[op2])->getValue())
-					{
-						log(string{"DFE/CP  -> "} + getInstructionString(inst));
-						toErase.push_back(&inst);
-						change = true;
-					}
-					else
-					{
 						constants[op2] = const1;
-					}
 				}
 				else if (constants[op2] != nullptr)
 				{
