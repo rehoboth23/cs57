@@ -1,9 +1,26 @@
 source = pset
 LLVMCODE = optimizer
 TEST = test1
-# OBJS = optimizer.o
 OS := $(shell uname -s)
 CLANG = clang++ --std=c++2a
+
+ifeq ($(OS), Linux)
+LDC=`llvm-config-15 --cflags` -I /usr/include/llvm-c-15/
+CDC=`llvm-config-15 --cxxflags --ldflags --libs core` -I /usr/include/llvm-c-15/
+DEBUGGER=gdb --args
+else
+LDC=`llvm-config --cflags` -I /usr/include/llvm-c/
+CDC=`llvm-config --cxxflags --ldflags --libs core` -I /usr/include/llvm-c/
+DEBUGGER=lldb --
+endif
+
+ifeq ($(LOG), LOG)
+LOGD=-DLOG
+else
+LOGD=
+endif
+
+
 
 all: $(LLVMCODE) llvm_file
 
@@ -14,22 +31,6 @@ $(source).out: $(source).l $(source).y ast.h ast.c sem.h sem.c
 	lex $(source).l
 	g++ -g -o $(source).out lex.yy.c y.tab.c ast.c sem.c
 
-test:
-	make clean
-	make $(source).out
-	./$(source).out semantic_tests/p1.c &> out1.c
-	./$(source).out semantic_tests/p2.c &> out2.c
-	./$(source).out semantic_tests/p3.c &> out3.c
-	./$(source).out semantic_tests/p4.c &> out4.c
-
-debug:
-	make clean
-	make $(source).out
-	echo "r" | gdb --args ./$(source).out semantic_tests/p1.c &> out1.c
-	echo "r" | gdb --args ./$(source).out semantic_tests/p2.c &> out2.c
-	echo "r" | gdb --args ./$(source).out semantic_tests/p3.c &> out3.c
-	echo "r" | gdb --args ./$(source).out semantic_tests/p4.c &> out4.c
-
 valgrind:
 	make clean
 	make $(source).out
@@ -38,15 +39,9 @@ valgrind:
 	valgrind --leak-check=full --show-leak-kinds=all ./$(source).out semantic_tests/p3.c &> out3.c
 	valgrind --leak-check=full --show-leak-kinds=all ./$(source).out semantic_tests/p4.c &> out4.c
 
-ifeq ($(LOG), LOG)
-$(LLVMCODE): $(LLVMCODE).cpp $(OBJS)
-	$(CLANG) -g -DLOG `llvm-config --cflags` -I /usr/include/llvm-c/ -c $(LLVMCODE).cpp
-	$(CLANG) `llvm-config --cppflags --ldflags --libs core` -I /usr/include/llvm-c/ $(LLVMCODE).o $(OBJS) -o $@
-else
-$(LLVMCODE): $(LLVMCODE).cpp $(OBJS)
-	$(CLANG) -g `llvm-config --cflags` -I /usr/include/llvm-c/ -c $(LLVMCODE).cpp
-	$(CLANG) `llvm-config --cppflags --ldflags --libs core` -I /usr/include/llvm-c/ $(LLVMCODE).o $(OBJS) -o $@
-endif
+$(LLVMCODE): $(LLVMCODE).cpp $(LLVMCODE).h
+	$(CLANG) -g $(LOGD) $(LDC) -c $(LLVMCODE).cpp
+	$(CLANG) $(CDC) -I /usr/include/llvm-c/ $(LLVMCODE).o $(OBJS) -o $@
 
 llvm_file: test_llvm/$(TEST).c
 	$(CLANG) -S -emit-llvm test_llvm/$(TEST).c -o test_llvm/$(TEST).ll
@@ -55,21 +50,9 @@ run:
 	make all
 	./$(LLVMCODE) test_llvm/$(TEST).ll test_llvm/$(TEST)_out.ll
 
-# ifeq ($(LOG), LOG)
-# optimizer.o:
-# 	$(CLANG) -g -D$(LOG) `llvm-config --cflags` -I /usr/include/llvm-c/ -c optimizer.h optimizer.cpp
-# else
-# optimizer.o:
-# 	$(CLANG) -g `llvm-config --cflags` -I /usr/include/llvm-c/ -c optimizer.h optimizer.cpp
-# endif
-
-ifeq ($(OS), Linux)
-debug_ll:
-	gdb --args ./$(LLVMCODE) test_llvm/$(TEST).ll test_llvm/$(TEST)_out.ll
-else
-debug_ll:
-	lldb -- ./$(LLVMCODE) test_llvm/$(TEST).ll test_llvm/$(TEST)_out.ll
-endif
+debug:
+	make all
+	$(DEBUGGER) ./$(LLVMCODE) test_llvm/$(TEST).ll test_llvm/$(TEST)_out.ll
 
 clean:
 	rm -rf lex.yy.c
