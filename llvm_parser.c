@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <iostream>
 #include <llvm-c/Core.h>
 #include <llvm-c/IRReader.h>
 #include <llvm-c/Types.h>
@@ -39,17 +40,21 @@ LLVMModuleRef createLLVMModel(char *filename)
 
 void walkBasicblocks(LLVMValueRef function)
 {
-	for (LLVMBasicBlockRef basicBlock = LLVMGetFirstBasicBlock(function);
-			 basicBlock;
-			 basicBlock = LLVMGetNextBasicBlock(basicBlock))
+	bool change;
+	do
 	{
+		change = false;
+		for (LLVMBasicBlockRef basicBlock = LLVMGetFirstBasicBlock(function);
+				 basicBlock;
+				 basicBlock = LLVMGetNextBasicBlock(basicBlock))
+		{
 
-		// printf("\nIn basic block\n");
-		eliminateCommonSubExpression(basicBlock);
-		eliminateDeadCode(basicBlock);
-		constantFolding(basicBlock);
-		eliminateDeadCode(basicBlock);
-	}
+			eliminateCommonSubExpression(basicBlock, &change);
+			eliminateDeadCode(basicBlock, &change);
+			constantFolding(basicBlock, &change);
+			constantPropagation(function, &change);
+		}
+	} while (change);
 }
 
 void walkFunctions(LLVMModuleRef module)
@@ -82,7 +87,7 @@ void walkGlobalValues(LLVMModuleRef module)
 int main(int argc, char **argv)
 {
 	LLVMModuleRef m;
-	if (argc == 2)
+	if (argc >= 2)
 	{
 		m = createLLVMModel(argv[1]);
 	}
@@ -95,7 +100,14 @@ int main(int argc, char **argv)
 	if (m != NULL)
 	{
 		walkFunctions(m);
-		LLVMDumpModule(m);
+		if (argc == 3)
+		{
+			saveModule(m, argv[2]);
+		}
+		else
+		{
+			saveModule(m, NULL);
+		}
 	}
 	else
 	{

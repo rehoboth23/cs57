@@ -41,10 +41,16 @@ $(LLVMCODE): $(LLVMCODE).c opt.o
 
 llvm_file: test_llvm/$(TEST).c
 	clang++ -S -emit-llvm test_llvm/$(TEST).c -o test_llvm/$(TEST).ll
-	./llvm_parser test_llvm/test1.ll &> TRACE
+	./llvm_parser test_llvm/test1.ll out.ll
 
 opt.o:
 	clang++ -g `llvm-config-15 --cflags` -I /usr/include/llvm-c-15/ -c opt.h opt.c
 
 clean:
-	rm -rf lex.yy.c y.tab.c y.tab.h $(source).out y.output out*.c TRACE* *.ll $(LLVMCODE) opt.o
+	rm -rf lex.yy.c
+	rm -rf y.tab.c y.tab.h
+	rm -rf $(source).out y.output
+	rm -rf $(source).out y.output
+	rm -rf out*.c
+	rm -rf *TRACE *.ll test_llvm/*.ll
+	rm -rf $(LLVMCODE) *.o *.gch

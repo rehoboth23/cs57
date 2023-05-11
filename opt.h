@@ -19,9 +19,13 @@
 
 #include <cstddef>
 #include <llvm-c/Types.h>
+#include <llvm-c/Core.h>
+#include <llvm-c/IRReader.h>
+#include <llvm-c/Transforms/Scalar.h>
 
-void eliminateCommonSubExpression(LLVMBasicBlockRef bb);
-
-void eliminateDeadCode(LLVMBasicBlockRef bb);
-void constantFolding(LLVMBasicBlockRef bb);
+void eliminateCommonSubExpression(LLVMBasicBlockRef bb, bool *change);
+void eliminateDeadCode(LLVMBasicBlockRef bb, bool *change);
+void constantFolding(LLVMBasicBlockRef bb, bool *change);
+void constantPropagation(LLVMValueRef function, bool *change);
+void saveModule(LLVMModuleRef module, const char *filename);
 #endif
