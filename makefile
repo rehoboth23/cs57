@@ -45,7 +45,7 @@ llvm_file: test_llvm/$(TEST).c
 
 run:
 	make all
-	./$(LLVMCODE) test_llvm/$(TEST).ll out.ll
+	./$(LLVMCODE) test_llvm/$(TEST).ll test_llvm/$(TEST)_out.ll
 
 optimizer.o:
 	clang++ -g -D$(LOG) `llvm-config-15 --cflags` -I /usr/include/llvm-c-15/ -c optimizer.h optimizer.c
