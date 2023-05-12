@@ -231,8 +231,10 @@ int main(int argc, char** argv){
 		analyze(analyzer, root);
 		deleteAnalyzer(analyzer);
 		llvmBackendCaller(root);
+		freeNode(root);
+	} else {
+		
 	}
-	freeNode(root);
 	if (yyin != stdin)
 		fclose(yyin);
 	yylex_destroy();

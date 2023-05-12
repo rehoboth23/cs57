@@ -19,13 +19,13 @@
 #include <llvm/IR/Module.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IRReader/IRReader.h>
-#include "llvm/IR/IRBuilder.h"
+#include <llvm/IR/IRBuilder.h>
 #include <llvm/Support/SourceMgr.h>
 #include <llvm/Support/Error.h>
-#include "llvm/IR/Constants.h"
-#include "llvm/IR/Instruction.h"
-#include "llvm/IR/Instructions.h"
-#include "llvm/IR/BasicBlock.h"
+#include <llvm/IR/Constants.h>
+#include <llvm/IR/Instruction.h>
+#include <llvm/IR/Instructions.h>
+#include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/Function.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/raw_os_ostream.h>
@@ -311,15 +311,46 @@ astNode *getBlockEnd(astNode *node)
 	return node;
 }
 
-llvm::Value *parseExpression(llvm::IRBuilder<> &builder, astNode *node, map<string, llvm::Value *> allocaMap)
+llvm::Value *parseExpression(llvm::IRBuilder<> &builder, astFunc &func,
+														 astNode *node, map<string, llvm::Value *> allocaMap, llvm::Type *retType = nullptr, llvm::Module *module = nullptr)
 {
 	assert(node);
 	switch (node->type)
 	{
+	case ast_stmt:
+	{
+		switch (node->stmt.type)
+		{
+		case ast_call:
+		{
+			astCall call = node->stmt.call;
+			std::vector<llvm::Type *> callArgTypes;
+			if (call.param)
+			{
+				callArgTypes.push_back(builder.getInt32Ty());
+			}
+			string callName{call.name};
+			llvm::Type *callRetType = callName == string{"read"} ? builder.getInt32Ty() : (callName == func.name ? retType : builder.getVoidTy());
+			llvm::FunctionType *callType = llvm::FunctionType::get(callRetType, callArgTypes, false);
+
+			// create a function declaration for printf with the previously created function type and the name "printf"
+			llvm::Function *callFunc = llvm::Function::Create(callType, llvm::Function::ExternalLinkage, call.name, module);
+			std::vector<llvm::Value *> args = {};
+			if (call.param)
+			{
+				args.push_back(parseExpression(builder, func, call.param, allocaMap, retType, module));
+			}
+			return builder.CreateCall(callFunc, args);
+		}
+		default:
+			break;
+		}
+		break;
+	}
 	case ast_bexpr:
 	{
-		llvm::Value *lhs = parseExpression(builder, node->bexpr.lhs, allocaMap);
-		llvm::Value *rhs = parseExpression(builder, node->bexpr.rhs, allocaMap);
+		llvm::Value *lhs = parseExpression(builder, func, node->bexpr.lhs, allocaMap, retType, module);
+		llvm::Value *rhs = parseExpression(builder, func, node->bexpr.rhs, allocaMap, retType, module);
 		llvm::Instruction::BinaryOps op;
 
 		switch (node->bexpr.op)
@@ -343,7 +374,7 @@ llvm::Value *parseExpression(llvm::IRBuilder<> &builder, astNode *node, map<stri
 	}
 	case ast_uexpr:
 	{
-		llvm::Value *uexpr = parseExpression(builder, node->uexpr.expr, allocaMap);
+		llvm::Value *uexpr = parseExpression(builder, func, node->uexpr.expr, allocaMap, retType, module);
 		op_type op = node->uexpr.op;
 		switch (op)
 		{
@@ -389,16 +420,13 @@ void llvmBackendCaller(astNode *node)
 	astProg prog = node->prog;
 	astFunc func = prog.func->func;
 
-	llvm::FunctionType *funcType;
 	llvm::Type *retType = string{func.type} == string{"int"} ? builder.getInt32Ty() : builder.getVoidTy();
+	std::vector<llvm::Type *> argTypes;
 	if (func.param != nullptr)
 	{
-		funcType = llvm::FunctionType::get(retType, builder.getInt32Ty(), false);
+		argTypes.push_back(builder.getInt32Ty());
 	}
-	else
-	{
-		funcType = llvm::FunctionType::get(retType, false);
-	}
+	llvm::FunctionType *funcType = llvm::FunctionType::get(retType, argTypes, false);
 	llvm::Function *llvmFunc = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, func.name, module);
 
 	vector<astNode *> nodeStack;
@@ -421,6 +449,9 @@ void llvmBackendCaller(astNode *node)
 		case ast_stmt:
 			switch (node->stmt.type)
 			{
+			case ast_call:
+				parseExpression(builder, func, node, allocaMap, retType, module);
+				break;
 			case ast_block:
 			{
 				llvm::BasicBlock *block;
@@ -438,7 +469,7 @@ void llvmBackendCaller(astNode *node)
 					astVar var = func.param->var;
 					llvm::Value *allocaP = builder.CreateAlloca(llvm::Type::getInt32Ty(context), 0, nullptr, string{var.name});
 					llvm::Value *funcParamValue = llvmFunc->arg_begin();
-					builder.CreateStore(builder.CreateLoad(funcParamValue->getType(), funcParamValue), allocaP, false);
+					builder.CreateStore(funcParamValue, allocaP, false);
 					allocaMap[string{var.name}] = allocaP;
 				}
 				else if (llvmFunc->size() > 1)
@@ -456,8 +487,8 @@ void llvmBackendCaller(astNode *node)
 			case ast_asgn:
 			{
 				llvm::Value *lhs = allocaMap[string{node->stmt.asgn.lhs->var.name}];
-				llvm::Value *rhs = parseExpression(builder, node->stmt.asgn.rhs, allocaMap);
-				builder.CreateStore(lhs, rhs, false);
+				llvm::Value *rhs = parseExpression(builder, func, node->stmt.asgn.rhs, allocaMap, retType, module);
+				builder.CreateStore(rhs, lhs, false);
 				break;
 			}
 			case ast_while:
@@ -466,8 +497,8 @@ void llvmBackendCaller(astNode *node)
 			{
 				astIf ifNode = node->stmt.ifn;
 				astRExpr rexpr = ifNode.cond->rexpr;
-				llvm::Value *lhs = parseExpression(builder, rexpr.lhs, allocaMap);
-				llvm::Value *rhs = parseExpression(builder, rexpr.rhs, allocaMap);
+				llvm::Value *lhs = parseExpression(builder, func, rexpr.lhs, allocaMap, retType, module);
+				llvm::Value *rhs = parseExpression(builder, func, rexpr.rhs, allocaMap, retType, module);
 				;
 				llvm::Value *cond;
 				switch (rexpr.op)
@@ -520,12 +551,10 @@ void llvmBackendCaller(astNode *node)
 			break;
 			case ast_ret:
 			{
-				llvm::Value *retexpr = parseExpression(builder, node->stmt.ret.expr, allocaMap);
+				llvm::Value *retexpr = parseExpression(builder, func, node->stmt.ret.expr, allocaMap, retType, module);
 				builder.CreateRet(retexpr);
 				break;
 			}
-			case ast_call:
-				break;
 			case ast_decl:
 			{
 				string varName{node->stmt.decl.name};
@@ -547,17 +576,14 @@ void llvmBackendCaller(astNode *node)
 		}
 		if (blockSuccessionMap.find(node) != blockSuccessionMap.end())
 		{
-			cout << node << " in here -> " << fb << endl;
 			tuple<llvm::BasicBlock *, llvm::BasicBlock *> nextBr = blockSuccessionMap[node];
 			builder.CreateBr(get<1>(nextBr));
-			cout << "next -> " << get<0>(nextBr) << endl;
 			builder.SetInsertPoint(get<0>(nextBr));
-			cout << "br -> " << get<1>(nextBr) << endl;
 		}
 	}
 	module->print(llvm::outs(), nullptr);
-	optimizeModule(*module);
-	module->print(llvm::outs(), nullptr);
+	// optimizeModule(*module);
+	// module->print(llvm::outs(), nullptr);
 }
 
 #ifdef OPTIMIZER

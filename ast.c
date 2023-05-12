@@ -31,8 +31,8 @@ void freeProg(astNode *node)
 {
 	assert(node != NULL && node->type == ast_prog);
 
-	freeExtern(node->prog.ext1);
-	freeExtern(node->prog.ext2);
+	if(node->prog.ext1) freeExtern(node->prog.ext1);
+	if(node->prog.ext2) freeExtern(node->prog.ext2);
 	freeFunc(node->prog.func);
 
 	free(node);

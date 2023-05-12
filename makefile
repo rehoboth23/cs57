@@ -1,6 +1,6 @@
 source = pset
 LLVMCODE = optimizer
-TEST = test1
+TEST = p1
 OS := $(shell uname -s)
 CLANG = clang++ --std=c++2a
 
@@ -28,7 +28,7 @@ OPTD=
 endif
 
 
-all: $(LLVMCODE) llvm_file
+all: $(LLVMCODE).o $(source).out
 
 .PHONY: all test valgrind debug
 
@@ -37,18 +37,20 @@ $(source).out: $(source).l $(source).y ast.h ast.c sem.h sem.cpp $(LLVMCODE).o
 	lex $(source).l
 	$(CLANG) -g $(CDC) $(LLVMCODE).o -o $(source).out lex.yy.c y.tab.c ast.c sem.cpp
 
-$(LLVMCODE): $(LLVMCODE).o
-	$(CLANG) $(CDC) $(LLVMCODE).o $(OBJS) -o $@
+# $(LLVMCODE): $(LLVMCODE).o
+# 	$(CLANG) $(CDC) $(LLVMCODE).o $(OBJS) -o $@
 
 $(LLVMCODE).o: $(LLVMCODE).cpp $(LLVMCODE).h
 	$(CLANG) $(LOGD) $(OPTD) -g $(LOGD) $(LDC) -c $(LLVMCODE).cpp
 
-llvm_file: test_llvm/$(TEST).c
-	$(CLANG) -S -emit-llvm test_llvm/$(TEST).c -o test_llvm/$(TEST).ll
+# llvm_file: test_llvm/$(TEST).c
+# 	$(CLANG) -S -emit-llvm test_llvm/$(TEST).c -o test_llvm/$(TEST).ll
 
 run:
 	make all
-	./$(LLVMCODE) test_llvm/$(TEST).ll test_llvm/$(TEST)_out.ll
+	./$(source).out semantic_tests/$(TEST).c > $(TEST).ll
+	clang main.c $(TEST).ll -o $(TEST).out
+	./$(TEST).out
 
 mem:
 	make all
