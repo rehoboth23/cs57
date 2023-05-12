@@ -26,6 +26,7 @@
 #include <llvm/IR/Module.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IRReader/IRReader.h>
+#include "llvm/IR/IRBuilder.h"
 #include <llvm/Support/SourceMgr.h>
 #include <llvm/Support/Error.h>
 #include "llvm/IR/Constants.h"
@@ -36,6 +37,8 @@
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/raw_os_ostream.h>
 #include <fstream>
+#include <cassert>
+#include "ast.h"
 
 using namespace std;
 

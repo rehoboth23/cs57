@@ -64,11 +64,13 @@ typedef struct
 	astNode *ext1; // extern function print
 	astNode *ext2; // extern function read
 	astNode *func; // function defined in input miniC program
+	char *name;
 } astProg;
 
 typedef struct
 {
 	char *name;			// name of the function
+	char *type;			// name of the function
 	astNode *param; // parameter, possibly NULL if the function doesn't take a param
 	astNode *body;	// function body
 } astFunc;
@@ -187,7 +189,7 @@ defined above. All the create* functions return a astNode*.
 */
 
 astNode *createProg(astNode *extern1, astNode *extern2, astNode *func);
-astNode *createFunc(const char *name, astNode *param, astNode *body);
+astNode *createFunc(const char *name, const char *type, astNode *param, astNode *body);
 astNode *createExtern(const char *name);
 astNode *createVar(const char *name);
 astNode *createCnst(int value);

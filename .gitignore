@@ -19,3 +19,4 @@ ast.h
 optimizer
 *.gch
 *.ll
+create_ir*

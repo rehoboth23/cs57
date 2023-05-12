@@ -17,6 +17,19 @@
 #include "optimizer.h"
 
 using namespace std;
+llvm::BasicBlock *getNthBlock(llvm::Function &func, unsigned int n)
+{
+	if (func.size() == 0)
+	{
+		return nullptr;
+	}
+	llvm::BasicBlock *block = &func.getEntryBlock();
+	for (unsigned int i = 0; i < n && block != nullptr; ++i)
+	{
+		block = block->getNextNode();
+	}
+	return block;
+}
 
 string getInstructionString(llvm::Instruction &inst)
 {
@@ -49,6 +62,8 @@ void eliminateCommonSubExpression(llvm::BasicBlock &basicBlock, bool &change)
 					delete commonSubexpressions[p];
 					commonSubexpressions.erase(p);
 				}
+				delete opTrace[op2];
+				opTrace.erase(op2);
 			}
 			break;
 		case llvm::Instruction::Alloca:
@@ -180,7 +195,14 @@ void constantPropagation(llvm::Function &func, bool &change)
 			case llvm::Instruction::Store:
 				if (const1)
 				{
+					if (constants[op2] != nullptr && const1->getValue() == constants[op2]->getValue())
+					{
+						toErase.push_back(&inst);
+					}
+					else
+					{
 						constants[op2] = const1;
+					}
 				}
 				else if (constants[op2] != nullptr)
 				{
@@ -191,17 +213,12 @@ void constantPropagation(llvm::Function &func, bool &change)
 				if (const1)
 				{
 					log(string{"CP -> "} + getInstructionString(inst));
-					// int64_t op1Val = LLVMConstIntGetSExtValue();
-					// LLVMValueRef newInstruction = LLVMConstInt(LLVMInt32Type(), op1Val, 1);
 					inst.replaceAllUsesWith(const1);
 					change = true;
 				}
 				else if (constants[op1] != nullptr)
 				{
 					log(string{"CP -> "} + getInstructionString(inst));
-					// LLVMValueRef newInstruction = LLVMConstInt(LLVMInt32Type(), op1Val, 1);
-					// LLVMReplaceAllUsesWith(inst, newInstruction);
-					// constants[op1]
 					inst.replaceAllUsesWith(constants[op1]);
 					change = true;
 				}
@@ -274,6 +291,116 @@ void runOptimizer(string irInFileName, string irOutFileName)
 		}
 		module.reset();
 	}
+}
+
+llvm::Value *generateIR(astNode *node, llvm::LLVMContext &context, llvm::IRBuilder<> &builder, llvm::Function *func, int &blockNum)
+{
+	llvm::Value *res = nullptr;
+	llvm::BasicBlock *block;
+	llvm::Value *inst1;
+	llvm::Value *inst2;
+	llvm::Instruction::BinaryOps opCode;
+	if (node == nullptr)
+	{
+		return res;
+	}
+
+	switch (node->type)
+	{
+	case ast_stmt:
+		switch (node->stmt.type)
+		{
+		case ast_block:
+			block = llvm::BasicBlock::Create(context, to_string(func->size()), func);
+			blockNum++;
+			for (astNode *stmt : *(node->stmt.block.stmt_list))
+			{
+				generateIR(stmt, context, builder, func);
+			}
+			blockNum--;
+			res = block->getFirstNonPHIOrDbg();
+			break;
+		case ast_asgn:
+			inst1 = generateIR(node->stmt.asgn.lhs, context, builder, func);
+			inst2 = generateIR(node->stmt.asgn.rhs, context, builder, func);
+			res = llvm::cast<llvm::Value>(builder.CreateStore(inst1, inst2));
+			break;
+		case ast_while:
+			break;
+		case ast_if:
+			break;
+		case ast_ret:
+			break;
+		case ast_call:
+			break;
+		case ast_decl:
+			break;
+		default:
+			break;
+		}
+		break;
+	case ast_var:
+		break;
+	case ast_bexpr:
+		inst1 = generateIR(node->stmt.asgn.lhs, context, builder, func);
+		inst2 = generateIR(node->stmt.asgn.rhs, context, builder, func);
+
+		switch (node->bexpr.op)
+		{
+		case add:
+			opCode = llvm::Instruction::Add;
+			break;
+		case sub:
+			opCode = llvm::Instruction::Sub;
+			break;
+		case mul:
+			opCode = llvm::Instruction::Mul;
+			break;
+		case divide:
+			opCode = llvm::Instruction::SDiv;
+			break;
+		default:
+			break;
+		}
+		if (opCode) {
+			res = llvm::cast<llvm::Value>(builder.CreateBinOp(opCode, inst1, inst1, ""));
+		}
+		break;
+	case ast_rexpr:
+		break;
+	case ast_uexpr:
+		break;
+	default:
+		break;
+	}
+	return res;
+}
+
+void llvmBackendCaller(astNode *node)
+{
+	if (node->type != ast_prog)
+	{
+		cerr << "Wrong type or astNode. Must begin with an ast_prog" << endl;
+		exit(1);
+	}
+	llvm::LLVMContext context;
+	llvm::Module *module = new llvm::Module("Prog", context);
+	;
+	llvm::IRBuilder<> builder(context);
+
+	astFunc func = node->func;
+
+	llvm::FunctionType *funcType;
+	llvm::Type *retType = string{func.type} == string{"int"} ? builder.getInt32Ty() : builder.getVoidTy();
+	if (func.param == nullptr)
+	{
+		funcType = llvm::FunctionType::get(retType, builder.getInt32Ty(), false);
+	}
+	else
+	{
+		funcType = llvm::FunctionType::get(retType, false);
+	}
+	llvm::Function *llvmFunc = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, func.name, module);
 }
 
 int main(int argc, char **argv)

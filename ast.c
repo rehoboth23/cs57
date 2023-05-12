@@ -40,7 +40,7 @@ void freeProg(astNode *node)
 }
 
 /*create and free functions for ast_func type astNode */
-astNode *createFunc(const char *name, astNode *param, astNode *body)
+astNode *createFunc(const char *name, const char *type, astNode *param, astNode *body)
 {
 	astNode *node;
 	node = (astNode *)calloc(1, sizeof(astNode));
@@ -48,6 +48,9 @@ astNode *createFunc(const char *name, astNode *param, astNode *body)
 
 	node->func.name = (char *)calloc(1, sizeof(char) * (strlen(name) + 1));
 	strcpy(node->func.name, name);
+
+	node->func.type = (char *)calloc(1, sizeof(char) * (strlen(type) + 1));
+	strcpy(node->func.type, type);
 
 	node->func.param = param;
 	node->func.body = body;
@@ -60,6 +63,7 @@ void freeFunc(astNode *node)
 	assert(node != NULL && node->type == ast_func);
 
 	free(node->func.name);
+	free(node->func.type);
 	if (node->func.param != NULL)
 		freeVar(node->func.param);
 

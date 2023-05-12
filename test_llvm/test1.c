@@ -2,7 +2,7 @@ int func(int i)
 {
 	int a;
 
-	if (a < 10)
+	while (a < 10)
 	{
 		int b;
 		b = 20;

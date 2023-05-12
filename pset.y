@@ -5,6 +5,7 @@
 #include "vector"
 #include "sem.h"
 #include <assert.h>
+
 void yyerror(const char *);
 extern int yylex();
 extern int yylex_destroy();
@@ -22,9 +23,9 @@ astNode *root;
 	vector<astNode *> *vec_ptr;
 }
 
-%token TYPE IF ELSE WHILE LT GT LTE GTE EQ NEQ ADD SUB MUL DIV EXTERN RETURN
+%token IF ELSE WHILE LT GT LTE GTE EQ NEQ ADD SUB MUL DIV EXTERN RETURN
 %token <ival> NUM
-%token <vname> VAR
+%token <vname> VAR TYPE
 
 %type <vec_ptr>  statements variable_declarations
 %type <nptr> program exters_token extern_print extern_read function function_definition if_else loop if_statment else_statement code_block statement variable_declaration assignment function_call expr arithmetic condition parameter operand unary
@@ -66,13 +67,15 @@ function: function_definition code_block {
 // a function definition
 function_definition: TYPE VAR '(' TYPE VAR ')' {
 											astNode *var = createVar($5);
-											$$ = createFunc($2, var, nullptr);
+											$$ = createFunc($2, $1, var, nullptr);
 											free($2);
+											// free($1);
 											free($5);
 										}
 										| TYPE VAR '(' ')' {
-											$$ = createFunc($2, nullptr, nullptr);
+											$$ = createFunc($2, $1, nullptr, nullptr);
 											free($2);
+											// free($1);
 										}
 
 // a loop (while) block
@@ -215,11 +218,9 @@ int main(int argc, char** argv){
 		yyin = fopen(argv[1], "r");
 	}
 	yyparse();
-	cout << endl << "/**" << endl;
 	analyzer_t *analyzer = createAnalyzer();
 	analyze(analyzer, root);
 	deleteAnalyzer(analyzer);
-	cout << "*/" << endl;
 	freeNode(root);
 	if (yyin != stdin)
 		fclose(yyin);

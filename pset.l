@@ -25,10 +25,16 @@ empty 					^[ \t]*\n$
 
 "int" {
 	printf("%s", yytext);
+	char *p=(char *)calloc(strlen(yytext)+1,sizeof(char));
+	strncpy(p, yytext, strlen(yytext));
+	yylval.vname = p;
 	return TYPE;
 }
 "void" {
 	printf("%s", yytext);
+	char *p=(char *)calloc(strlen(yytext)+1,sizeof(char));
+	strncpy(p, yytext, strlen(yytext));
+	yylval.vname = p;
 	return TYPE;
 }
 
