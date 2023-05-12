@@ -14,21 +14,30 @@
  *
  */
 
+#include <llvm/IR/Type.h>
+#include <llvm/IR/Value.h>
+#include <llvm/IR/Module.h>
+#include <llvm/IR/LLVMContext.h>
+#include <llvm/IRReader/IRReader.h>
+#include "llvm/IR/IRBuilder.h"
+#include <llvm/Support/SourceMgr.h>
+#include <llvm/Support/Error.h>
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/Instruction.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/BasicBlock.h"
+#include <llvm/IR/Function.h>
+#include <llvm/Support/raw_ostream.h>
+#include <llvm/Support/raw_os_ostream.h>
 #include "optimizer.h"
 
 using namespace std;
-llvm::BasicBlock *getNthBlock(llvm::Function &func, unsigned int n)
+
+void log(string s)
 {
-	if (func.size() == 0)
-	{
-		return nullptr;
-	}
-	llvm::BasicBlock *block = &func.getEntryBlock();
-	for (unsigned int i = 0; i < n && block != nullptr; ++i)
-	{
-		block = block->getNextNode();
-	}
-	return block;
+#ifdef LOG
+	cout << s << endl;
+#endif
 }
 
 string getInstructionString(llvm::Instruction &inst)
@@ -247,9 +256,9 @@ unique_ptr<llvm::Module> createModule(string irFileName, llvm::LLVMContext &cont
 	return module;
 }
 
-void optimizeModule(unique_ptr<llvm::Module> &module)
+void optimizeModule(llvm::Module &module)
 {
-	for (llvm::Function &func : module->functions())
+	for (llvm::Function &func : module.functions())
 	{
 
 		bool change;
@@ -280,7 +289,7 @@ void runOptimizer(string irInFileName, string irOutFileName)
 	unique_ptr<llvm::Module> module = createModule(irInFileName, context);
 	if (module)
 	{
-		optimizeModule(module);
+		optimizeModule(*(module.get()));
 		if (irOutFileName.size())
 		{
 			saveModule(module, irOutFileName);
@@ -293,87 +302,76 @@ void runOptimizer(string irInFileName, string irOutFileName)
 	}
 }
 
-llvm::Value *generateIR(astNode *node, llvm::LLVMContext &context, llvm::IRBuilder<> &builder, llvm::Function *func, int &blockNum)
+astNode *getBlockEnd(astNode *node)
 {
-	llvm::Value *res = nullptr;
-	llvm::BasicBlock *block;
-	llvm::Value *inst1;
-	llvm::Value *inst2;
-	llvm::Instruction::BinaryOps opCode;
-	if (node == nullptr)
+	if (node->type == ast_stmt && node->stmt.type == ast_block)
 	{
-		return res;
+		return node->stmt.block.stmt_list->back();
 	}
+	return node;
+}
 
+llvm::Value *parseExpression(llvm::IRBuilder<> &builder, astNode *node, map<string, llvm::Value *> allocaMap)
+{
+	assert(node);
 	switch (node->type)
 	{
-	case ast_stmt:
-		switch (node->stmt.type)
-		{
-		case ast_block:
-			block = llvm::BasicBlock::Create(context, to_string(func->size()), func);
-			blockNum++;
-			for (astNode *stmt : *(node->stmt.block.stmt_list))
-			{
-				generateIR(stmt, context, builder, func);
-			}
-			blockNum--;
-			res = block->getFirstNonPHIOrDbg();
-			break;
-		case ast_asgn:
-			inst1 = generateIR(node->stmt.asgn.lhs, context, builder, func);
-			inst2 = generateIR(node->stmt.asgn.rhs, context, builder, func);
-			res = llvm::cast<llvm::Value>(builder.CreateStore(inst1, inst2));
-			break;
-		case ast_while:
-			break;
-		case ast_if:
-			break;
-		case ast_ret:
-			break;
-		case ast_call:
-			break;
-		case ast_decl:
-			break;
-		default:
-			break;
-		}
-		break;
-	case ast_var:
-		break;
 	case ast_bexpr:
-		inst1 = generateIR(node->stmt.asgn.lhs, context, builder, func);
-		inst2 = generateIR(node->stmt.asgn.rhs, context, builder, func);
+	{
+		llvm::Value *lhs = parseExpression(builder, node->bexpr.lhs, allocaMap);
+		llvm::Value *rhs = parseExpression(builder, node->bexpr.rhs, allocaMap);
+		llvm::Instruction::BinaryOps op;
 
 		switch (node->bexpr.op)
 		{
 		case add:
-			opCode = llvm::Instruction::Add;
+			op = llvm::Instruction::Add;
 			break;
 		case sub:
-			opCode = llvm::Instruction::Sub;
+			op = llvm::Instruction::Sub;
 			break;
 		case mul:
-			opCode = llvm::Instruction::Mul;
+			op = llvm::Instruction::Mul;
 			break;
 		case divide:
-			opCode = llvm::Instruction::SDiv;
+			op = llvm::Instruction::SDiv;
 			break;
 		default:
 			break;
 		}
-		if (opCode) {
-			res = llvm::cast<llvm::Value>(builder.CreateBinOp(opCode, inst1, inst1, ""));
-		}
-		break;
-	case ast_rexpr:
-		break;
+		return builder.CreateBinOp(op, lhs, rhs);
+	}
 	case ast_uexpr:
-		break;
+	{
+		llvm::Value *uexpr = parseExpression(builder, node->uexpr.expr, allocaMap);
+		op_type op = node->uexpr.op;
+		switch (op)
+		{
+		case add:
+		{
+			return uexpr;
+		}
+		case sub:
+		{
+			return builder.CreateUnOp(llvm::Instruction::UnaryOps::UnaryOpsEnd, uexpr);
+		}
+		default:
+			break;
+		}
+	}
+	case ast_cnst:
+	{
+		return builder.getInt32(node->cnst.value);
+	}
+	case ast_var:
+	{
+		llvm::Value *allocaP = allocaMap[string{node->var.name}];
+		return builder.CreateLoad(builder.getInt32Ty(), allocaP, false);
+	}
 	default:
 		break;
 	}
-	return res;
+	return nullptr;
 }
 
 void llvmBackendCaller(astNode *node)
@@ -388,11 +386,12 @@ void llvmBackendCaller(astNode *node)
 	;
 	llvm::IRBuilder<> builder(context);
 
-	astFunc func = node->func;
+	astProg prog = node->prog;
+	astFunc func = prog.func->func;
 
 	llvm::FunctionType *funcType;
 	llvm::Type *retType = string{func.type} == string{"int"} ? builder.getInt32Ty() : builder.getVoidTy();
-	if (func.param == nullptr)
+	if (func.param != nullptr)
 	{
 		funcType = llvm::FunctionType::get(retType, builder.getInt32Ty(), false);
 	}
@@ -401,8 +400,167 @@ void llvmBackendCaller(astNode *node)
 		funcType = llvm::FunctionType::get(retType, false);
 	}
 	llvm::Function *llvmFunc = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, func.name, module);
+
+	vector<astNode *> nodeStack;
+	nodeStack.push_back(func.body);
+	vector<vector<astNode *>> blockStack;
+	map<astNode *, tuple<llvm::BasicBlock *, llvm::BasicBlock *>> blockSuccessionMap;
+	map<string, llvm::Value *> allocaMap;
+	map<astNode *, llvm::BasicBlock *> blockNodeMap;
+	llvm::BasicBlock *fb = nullptr;
+	while (nodeStack.size() || blockStack.size())
+	{
+		astNode *node = nodeStack.back();
+		nodeStack.pop_back();
+		if (node == nullptr)
+		{
+			continue;
+		}
+		switch (node->type)
+		{
+		case ast_stmt:
+			switch (node->stmt.type)
+			{
+			case ast_block:
+			{
+				llvm::BasicBlock *block;
+				if (blockNodeMap[node])
+				{
+					block = blockNodeMap[node];
+				}
+				else
+				{
+					block = llvm::BasicBlock::Create(context, "", llvmFunc);
+				}
+				builder.SetInsertPoint(block);
+				if (llvmFunc->size() == 1 && func.param != nullptr)
+				{
+					astVar var = func.param->var;
+					llvm::Value *allocaP = builder.CreateAlloca(llvm::Type::getInt32Ty(context), 0, nullptr, string{var.name});
+					llvm::Value *funcParamValue = llvmFunc->arg_begin();
+					builder.CreateStore(builder.CreateLoad(funcParamValue->getType(), funcParamValue), allocaP, false);
+					allocaMap[string{var.name}] = allocaP;
+				}
+				else if (llvmFunc->size() > 1)
+				{
+					blockStack.push_back(nodeStack);
+					nodeStack = vector<astNode *>{};
+				}
+				vector<astNode *> stmts = *(node->stmt.block.stmt_list);
+				for (auto it = stmts.rbegin(); it != stmts.rend(); it++)
+				{
+					nodeStack.push_back(*it);
+				}
+				break;
+			}
+			case ast_asgn:
+			{
+				llvm::Value *lhs = allocaMap[string{node->stmt.asgn.lhs->var.name}];
+				llvm::Value *rhs = parseExpression(builder, node->stmt.asgn.rhs, allocaMap);
+				builder.CreateStore(lhs, rhs, false);
+				break;
+			}
+			case ast_while:
+				break;
+			case ast_if:
+			{
+				astIf ifNode = node->stmt.ifn;
+				astRExpr rexpr = ifNode.cond->rexpr;
+				llvm::Value *lhs = parseExpression(builder, rexpr.lhs, allocaMap);
+				llvm::Value *rhs = parseExpression(builder, rexpr.rhs, allocaMap);
+				;
+				llvm::Value *cond;
+				switch (rexpr.op)
+				{
+				case lt:
+					cond = builder.CreateICmpSLT(lhs, rhs, "");
+					break;
+				case gt:
+					cond = builder.CreateICmpSGT(lhs, rhs, "");
+					break;
+				case le:
+					cond = builder.CreateICmpSLE(lhs, rhs, "");
+					break;
+				case ge:
+					cond = builder.CreateICmpSGE(lhs, rhs, "");
+					break;
+				case eq:
+					cond = builder.CreateICmpEQ(lhs, rhs, "");
+					break;
+				case neq:
+					cond = builder.CreateICmpNE(lhs, rhs, "");
+					break;
+				default:
+					break;
+				}
+
+				llvm::BasicBlock *ifBlock = llvm::BasicBlock::Create(context, "", llvmFunc);
+				llvm::BasicBlock *elseBlock = nullptr;
+				blockNodeMap[ifNode.if_body] = ifBlock;
+				if (ifNode.else_body)
+				{
+					elseBlock = llvm::BasicBlock::Create(context, "", llvmFunc);
+					llvm::BasicBlock *finalBlock = llvm::BasicBlock::Create(context, "", llvmFunc);
+					fb = finalBlock;
+					builder.CreateCondBr(cond, ifBlock, elseBlock);
+					blockSuccessionMap[getBlockEnd(ifNode.if_body)] = make_tuple(elseBlock, finalBlock);
+					blockSuccessionMap[getBlockEnd(ifNode.else_body)] = make_tuple(finalBlock, finalBlock);
+					blockNodeMap[ifNode.else_body] = elseBlock;
+					nodeStack.push_back(ifNode.else_body);
+				}
+				else
+				{
+					llvm::BasicBlock *finalBlock = llvm::BasicBlock::Create(context, "", llvmFunc);
+					fb = finalBlock;
+					builder.CreateCondBr(cond, ifBlock, finalBlock);
+					blockSuccessionMap[getBlockEnd(ifNode.if_body)] = make_tuple(finalBlock, finalBlock);
+				}
+				nodeStack.push_back(ifNode.if_body);
+			}
+			break;
+			case ast_ret:
+			{
+				llvm::Value *retexpr = parseExpression(builder, node->stmt.ret.expr, allocaMap);
+				builder.CreateRet(retexpr);
+				break;
+			}
+			case ast_call:
+				break;
+			case ast_decl:
+			{
+				string varName{node->stmt.decl.name};
+				llvm::Value *allocaP = builder.CreateAlloca(builder.getInt32Ty(), nullptr, varName);
+				allocaMap[varName] = allocaP;
+				break;
+			}
+			default:
+				break;
+			}
+			break;
+		default:
+			break;
+		}
+		if (nodeStack.empty() && !blockStack.empty())
+		{
+			nodeStack = blockStack.back();
+			blockStack.pop_back();
+		}
+		if (blockSuccessionMap.find(node) != blockSuccessionMap.end())
+		{
+			cout << node << " in here -> " << fb << endl;
+			tuple<llvm::BasicBlock *, llvm::BasicBlock *> nextBr = blockSuccessionMap[node];
+			builder.CreateBr(get<1>(nextBr));
+			cout << "next -> " << get<0>(nextBr) << endl;
+			builder.SetInsertPoint(get<0>(nextBr));
+			cout << "br -> " << get<1>(nextBr) << endl;
+		}
+	}
+	module->print(llvm::outs(), nullptr);
+	optimizeModule(*module);
+	module->print(llvm::outs(), nullptr);
 }
 
+#ifdef OPTIMIZER
 int main(int argc, char **argv)
 {
 	if (argc >= 2)
@@ -411,3 +569,4 @@ int main(int argc, char **argv)
 	}
 	return 0;
 }
+#endif

@@ -1,17 +1,13 @@
-extern void print(int);
-extern int read();
-
-int func(int i){
+int test(int m){
 	int a;
-	int b;
-  if (a < i){
-		while (b < i){
-			b = b + 20;
-		}
-		a = 10 + b;
+	a = m;
+	a = m;
+ 
+	if (m < 5){
+		a = m;
 	}
 	else {
-		if (b < i) 
-			b = a;
+		a = 5;
 	}
+	return(0);
 }

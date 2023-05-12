@@ -21,37 +21,17 @@
 #include <vector>
 #include <string>
 #include <iostream>
-#include <llvm/IR/Type.h>
-#include <llvm/IR/Value.h>
-#include <llvm/IR/Module.h>
-#include <llvm/IR/LLVMContext.h>
-#include <llvm/IRReader/IRReader.h>
-#include "llvm/IR/IRBuilder.h"
-#include <llvm/Support/SourceMgr.h>
-#include <llvm/Support/Error.h>
-#include "llvm/IR/Constants.h"
-#include "llvm/IR/Instruction.h"
-#include "llvm/IR/Instructions.h"
-#include "llvm/IR/BasicBlock.h"
-#include <llvm/IR/Function.h>
-#include <llvm/Support/raw_ostream.h>
-#include <llvm/Support/raw_os_ostream.h>
 #include <fstream>
 #include <cassert>
 #include "ast.h"
 
 using namespace std;
 
-void log(string s)
-{
-#ifdef LOG
-  cout << s << endl;
-#endif
-}
-
 #define prt(x)         \
   if (x)               \
   {                    \
     printf("%s\n", x); \
   }
+
+void llvmBackendCaller(astNode *node);
 #endif

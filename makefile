@@ -21,21 +21,27 @@ LOGD=-DLOG
 else
 LOGD=
 endif
-
+ifeq ($(OPTIMIZER), OPTIMIZER)
+OPTD=-DOPTIMIZER
+else
+OPTD=
+endif
 
 
 all: $(LLVMCODE) llvm_file
 
 .PHONY: all test valgrind debug
 
-$(source).out: $(source).l $(source).y ast.h ast.c sem.h sem.cpp
+$(source).out: $(source).l $(source).y ast.h ast.c sem.h sem.cpp $(LLVMCODE).o
 	yacc -d -v -t $(source).y
 	lex $(source).l
-	$(CLANG) -g -o $(source).out lex.yy.c y.tab.c ast.c sem.cpp
+	$(CLANG) -g $(CDC) $(LLVMCODE).o -o $(source).out lex.yy.c y.tab.c ast.c sem.cpp
 
-$(LLVMCODE): $(LLVMCODE).cpp $(LLVMCODE).h
-	$(CLANG) -g $(LOGD) $(LDC) -c $(LLVMCODE).cpp
-	$(CLANG) $(CDC) -I /usr/include/llvm-c/ $(LLVMCODE).o $(OBJS) -o $@
+$(LLVMCODE): $(LLVMCODE).o
+	$(CLANG) $(CDC) $(LLVMCODE).o $(OBJS) -o $@
+
+$(LLVMCODE).o: $(LLVMCODE).cpp $(LLVMCODE).h
+	$(CLANG) $(LOGD) $(OPTD) -g $(LOGD) $(LDC) -c $(LLVMCODE).cpp
 
 llvm_file: test_llvm/$(TEST).c
 	$(CLANG) -S -emit-llvm test_llvm/$(TEST).c -o test_llvm/$(TEST).ll

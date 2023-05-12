@@ -1,10 +1,11 @@
 %{
 #include <stdio.h>
-#include <iostream>
-#include "ast.h"
-#include "vector"
+// #include <iostream>
+// #include "ast.h"
+// #include "vector"
 #include "sem.h"
-#include <assert.h>
+#include "optimizer.h"
+// #include <assert.h>
 
 void yyerror(const char *);
 extern int yylex();
@@ -42,6 +43,12 @@ astNode *root;
 // final reduction state
 program: exters_token exters_token function {
 	$$ = createProg($1, $2, $3);
+	root = $$;
+} | exters_token function {
+	$$ = createProg($1, nullptr, $2);
+	root = $$;
+} | function {
+	$$ = createProg(nullptr, nullptr, $1);
 	root = $$;
 }
 
@@ -217,10 +224,14 @@ int main(int argc, char** argv){
 	if (argc == 2){
 		yyin = fopen(argv[1], "r");
 	}
+	root = nullptr;
 	yyparse();
-	analyzer_t *analyzer = createAnalyzer();
-	analyze(analyzer, root);
-	deleteAnalyzer(analyzer);
+	if (root) {
+		analyzer_t *analyzer = createAnalyzer();
+		analyze(analyzer, root);
+		deleteAnalyzer(analyzer);
+		llvmBackendCaller(root);
+	}
 	freeNode(root);
 	if (yyin != stdin)
 		fclose(yyin);
@@ -229,5 +240,5 @@ int main(int argc, char** argv){
 }
 
 void yyerror(const char * err){
-	fprintf(stdout, "[Syntax error %d]", yylineno);
+	fprintf(stdout, "[Syntax error %d]\n", yylineno);
 }
