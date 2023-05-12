@@ -1,3 +1,6 @@
+extern int read();
+extern void print(int);
+
 int test(int m){
 	int a;
 	int b;

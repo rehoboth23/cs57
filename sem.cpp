@@ -22,6 +22,7 @@ struct comp
 struct analyzer
 {
   vector<set<char *, comp> *> *tables;
+  set<char *, comp> *funcs;
 };
 
 /**
@@ -33,6 +34,7 @@ analyzer_t *createAnalyzer()
 {
   analyzer_t *analyzer = (analyzer_t *)calloc(1, sizeof(analyzer_t));
   analyzer->tables = new vector<set<char *, comp> *>();
+  analyzer->funcs = new set<char *, comp>();
   return analyzer;
 }
 
@@ -105,6 +107,23 @@ bool searchAnalyzer(analyzer_t *analyzer, char *variable)
   return false;
 }
 
+bool searchCall(analyzer_t *analyzer, char *call)
+{
+  set<char *, comp> *funcs = analyzer->funcs;
+  if (auto search = funcs->find(call); search != funcs->end())
+  {
+    return true;
+  }
+  return false;
+}
+
+void addCall(analyzer_t *analyzer, char *call)
+{
+  char *name = (char *)calloc(strlen(call) + 1, sizeof(char));
+  strncpy(name, call, strlen(call));
+  analyzer->funcs->insert(name);
+}
+
 /**
  * @brief delete analyzer
  *
@@ -121,7 +140,12 @@ void deleteAnalyzer(analyzer_t *analyzer)
     }
     delete (table);
   }
+  for (char *call : *(analyzer->funcs))
+  {
+    free(call);
+  }
   delete (analyzer->tables);
+  delete (analyzer->funcs);
   free(analyzer);
 }
 
@@ -134,9 +158,14 @@ void analyze(analyzer_t *analyzer, astNode *tree)
   switch (tree->type)
   {
   case ast_prog:
+    analyze(analyzer, tree->prog.ext1);
+    analyze(analyzer, tree->prog.ext2);
     analyze(analyzer, tree->prog.func);
     break;
   case ast_func:
+  {
+    char *name = tree->func.name;
+    addCall(analyzer, name);
     addNewTable(analyzer);
     if (tree->func.param != NULL)
     {
@@ -145,6 +174,13 @@ void analyze(analyzer_t *analyzer, astNode *tree)
     analyze(analyzer, tree->func.body);
     removeTopTable(analyzer);
     break;
+  }
+  case ast_extern:
+  {
+    char *name = tree->ext.name;
+    addCall(analyzer, name);
+    break;
+  }
   case ast_stmt:
     switch (tree->stmt.type)
     {
@@ -173,8 +209,17 @@ void analyze(analyzer_t *analyzer, astNode *tree)
       analyze(analyzer, tree->stmt.ret.expr);
       break;
     case ast_call:
+    {
+      astCall call = tree->stmt.call;
+      char *name = call.name;
+      if (!searchCall(analyzer, name))
+      {
+        cerr << "Unidentified call -> " << string{name} << endl;
+        exit(1);
+      }
       analyze(analyzer, tree->stmt.call.param);
       break;
+    }
     case ast_decl:
       if (searchAnalyzer(analyzer, tree->stmt.decl.name))
       {

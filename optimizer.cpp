@@ -311,8 +311,7 @@ astNode *getBlockEnd(astNode *node)
 	return node;
 }
 
-llvm::Value *parseExpression(llvm::IRBuilder<> &builder, astFunc &func,
-														 astNode *node, map<string, llvm::Value *> allocaMap, llvm::Type *retType = nullptr, llvm::Module *module = nullptr)
+llvm::Value *parseExpression(llvm::IRBuilder<> &builder, astNode *node, map<string, llvm::Value *> allocaMap, map<string, llvm::Function *> functionMap)
 {
 	assert(node);
 	switch (node->type)
@@ -324,23 +323,16 @@ llvm::Value *parseExpression(llvm::IRBuilder<> &builder, astFunc &func,
 		case ast_call:
 		{
 			astCall call = node->stmt.call;
-			std::vector<llvm::Type *> callArgTypes;
-			if (call.param)
+			llvm::Function *callFunc = functionMap[call.name];
+			if (callFunc)
 			{
-				callArgTypes.push_back(builder.getInt32Ty());
+				std::vector<llvm::Value *> args = {};
+				if (call.param)
+				{
+					args.push_back(parseExpression(builder, call.param, allocaMap, functionMap));
+				}
+				return builder.CreateCall(callFunc, args);
 			}
-			string callName{call.name};
-			llvm::Type *callRetType = callName == string{"read"} ? builder.getInt32Ty() : (callName == func.name ? retType : builder.getVoidTy());
-			llvm::FunctionType *callType = llvm::FunctionType::get(callRetType, callArgTypes, false);
-
-			// create a function declaration for printf with the previously created function type and the name "printf"
-			llvm::Function *callFunc = llvm::Function::Create(callType, llvm::Function::ExternalLinkage, call.name, module);
-			std::vector<llvm::Value *> args = {};
-			if (call.param)
-			{
-				args.push_back(parseExpression(builder, func, call.param, allocaMap, retType, module));
-			}
-			return builder.CreateCall(callFunc, args);
 		}
 		default:
 			break;
@@ -349,8 +341,8 @@ llvm::Value *parseExpression(llvm::IRBuilder<> &builder, astFunc &func,
 	}
 	case ast_bexpr:
 	{
-		llvm::Value *lhs = parseExpression(builder, func, node->bexpr.lhs, allocaMap, retType, module);
-		llvm::Value *rhs = parseExpression(builder, func, node->bexpr.rhs, allocaMap, retType, module);
+		llvm::Value *lhs = parseExpression(builder, node->bexpr.lhs, allocaMap, functionMap);
+		llvm::Value *rhs = parseExpression(builder, node->bexpr.rhs, allocaMap, functionMap);
 		llvm::Instruction::BinaryOps op;
 
 		switch (node->bexpr.op)
@@ -374,7 +366,7 @@ llvm::Value *parseExpression(llvm::IRBuilder<> &builder, astFunc &func,
 	}
 	case ast_uexpr:
 	{
-		llvm::Value *uexpr = parseExpression(builder, func, node->uexpr.expr, allocaMap, retType, module);
+		llvm::Value *uexpr = parseExpression(builder, node->uexpr.expr, allocaMap, functionMap);
 		op_type op = node->uexpr.op;
 		switch (op)
 		{
@@ -414,7 +406,7 @@ void llvmBackendCaller(astNode *node)
 	}
 	llvm::LLVMContext context;
 	llvm::Module *module = new llvm::Module("Prog", context);
-	;
+	map<string, llvm::Function *> functionMap;
 	llvm::IRBuilder<> builder(context);
 
 	astProg prog = node->prog;
@@ -428,9 +420,8 @@ void llvmBackendCaller(astNode *node)
 	}
 	llvm::FunctionType *funcType = llvm::FunctionType::get(retType, argTypes, false);
 	llvm::Function *llvmFunc = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, func.name, module);
-
-	vector<astNode *> nodeStack;
-	nodeStack.push_back(func.body);
+	functionMap[func.name] = llvmFunc;
+	vector<astNode *> nodeStack{func.body, prog.ext1, prog.ext2};
 	vector<vector<astNode *>> blockStack;
 	map<astNode *, tuple<llvm::BasicBlock *, llvm::BasicBlock *>> blockSuccessionMap;
 	map<string, llvm::Value *> allocaMap;
@@ -446,11 +437,25 @@ void llvmBackendCaller(astNode *node)
 		}
 		switch (node->type)
 		{
+		case ast_extern:
+		{
+			string name = string{node->ext.name};
+			std::vector<llvm::Type *> extArgTypes;
+			if (name == string{"print"})
+			{
+				extArgTypes.push_back(builder.getInt32Ty());
+			}
+			llvm::Type *extRetType = name == string{"read"} ? builder.getInt32Ty() : builder.getVoidTy();
+			llvm::FunctionType *extType = llvm::FunctionType::get(extRetType, extArgTypes, false);
+			llvm::Function *extFunc = llvm::Function::Create(extType, llvm::Function::ExternalLinkage, name, module);
+			functionMap[name] = extFunc;
+			break;
+		}
 		case ast_stmt:
 			switch (node->stmt.type)
 			{
 			case ast_call:
-				parseExpression(builder, func, node, allocaMap, retType, module);
+				parseExpression(builder, node, allocaMap, functionMap);
 				break;
 			case ast_block:
 			{
@@ -487,7 +492,7 @@ void llvmBackendCaller(astNode *node)
 			case ast_asgn:
 			{
 				llvm::Value *lhs = allocaMap[string{node->stmt.asgn.lhs->var.name}];
-				llvm::Value *rhs = parseExpression(builder, func, node->stmt.asgn.rhs, allocaMap, retType, module);
+				llvm::Value *rhs = parseExpression(builder, node->stmt.asgn.rhs, allocaMap, functionMap);
 				builder.CreateStore(rhs, lhs, false);
 				break;
 			}
@@ -497,8 +502,8 @@ void llvmBackendCaller(astNode *node)
 			{
 				astIf ifNode = node->stmt.ifn;
 				astRExpr rexpr = ifNode.cond->rexpr;
-				llvm::Value *lhs = parseExpression(builder, func, rexpr.lhs, allocaMap, retType, module);
-				llvm::Value *rhs = parseExpression(builder, func, rexpr.rhs, allocaMap, retType, module);
+				llvm::Value *lhs = parseExpression(builder, rexpr.lhs, allocaMap, functionMap);
+				llvm::Value *rhs = parseExpression(builder, rexpr.rhs, allocaMap, functionMap);
 				;
 				llvm::Value *cond;
 				switch (rexpr.op)
@@ -551,7 +556,7 @@ void llvmBackendCaller(astNode *node)
 			break;
 			case ast_ret:
 			{
-				llvm::Value *retexpr = parseExpression(builder, func, node->stmt.ret.expr, allocaMap, retType, module);
+				llvm::Value *retexpr = parseExpression(builder, node->stmt.ret.expr, allocaMap, functionMap);
 				builder.CreateRet(retexpr);
 				break;
 			}

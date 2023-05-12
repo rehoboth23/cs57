@@ -29,7 +29,7 @@ astNode *root;
 %token <vname> VAR TYPE
 
 %type <vec_ptr>  statements variable_declarations
-%type <nptr> program exters_token extern_print extern_read function function_definition if_else loop if_statment else_statement code_block statement variable_declaration assignment function_call expr arithmetic condition parameter operand unary
+%type <nptr> program extern_print extern_read function function_definition if_else loop if_statment else_statement code_block statement variable_declaration assignment function_call expr arithmetic condition parameter operand unary
 
 %left ADD SUB
 %left MUL DIV
@@ -41,19 +41,22 @@ astNode *root;
 
 %%
 // final reduction state
-program: exters_token exters_token function {
+program: extern_print extern_read function {
 	$$ = createProg($1, $2, $3);
 	root = $$;
-} | exters_token function {
+} | extern_read extern_print function {
+	$$ = createProg($1, $2, $3);
+	root = $$;
+} | extern_print function {
+	$$ = createProg($1, nullptr, $2);
+	root = $$;
+} | extern_read function {
 	$$ = createProg($1, nullptr, $2);
 	root = $$;
 } | function {
 	$$ = createProg(nullptr, nullptr, $1);
 	root = $$;
 }
-
-exters_token: extern_print
-						| extern_read
 
 extern_print: EXTERN TYPE VAR '(' TYPE ')' ';' {
 	$$ = createExtern($3);
