@@ -13,6 +13,13 @@ variable 				{letter}{alphanum_us}*
 number					[0-9]+
 empty 					^[ \t]*\n$
 %%
+"//".*\n {
+}
+
+"/*"(.*\n*.*)*"*/" {
+	printf("multiline\n");
+}
+
 "extern" {
 	// printf("%s", yytext);
 	return EXTERN;
@@ -30,6 +37,7 @@ empty 					^[ \t]*\n$
 	yylval.vname = p;
 	return TYPE;
 }
+
 "void" {
 	// printf("%s", yytext);
 	char *p=(char *)calloc(strlen(yytext)+1,sizeof(char));

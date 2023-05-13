@@ -1,12 +1,12 @@
 source = pset
-LLVMCODE = optimizer
+OBJS = optimizer.o ir_gen.o
 TEST = p1
 OS := $(shell uname -s)
 CLANG = clang++ --std=c++2a
 
 ifeq ($(OS), Linux)
-LDC=`llvm-config-15 --cflags` -I /usr/include/llvm-c-15/
-CDC=`llvm-config-15 --cxxflags --ldflags --libs core` -I /usr/include/llvm-c-15/
+LDC=`llvm-config-15 --cflags` -I/usr/include/llvm-c-15/ -I./
+CDC=`llvm-config-15 --cxxflags --ldflags --libs core` -I/usr/include/llvm-c-15/ -I./
 DEBUGGER=gdb --args
 MEM_CHECK=valgrind --leak-check=full --show-leak-kinds=all
 else
@@ -28,37 +28,34 @@ OPTD=
 endif
 
 
-all: $(LLVMCODE).o $(source).out
+all: $(OBJS) $(source).out
 
-.PHONY: all test valgrind debug
+.PHONY: all mem debug
 
-$(source).out: $(source).l $(source).y ast.h ast.c sem.h sem.cpp $(LLVMCODE).o
+$(source).out: $(source).l $(source).y ast.h ast.c sem.h sem.cpp $(OBJS)
 	yacc -d -v -t $(source).y
 	lex $(source).l
-	$(CLANG) -g $(CDC) $(LLVMCODE).o -o $(source).out lex.yy.c y.tab.c ast.c sem.cpp
+	$(CLANG) -g $(CDC) $(OBJS) -o $(source).out lex.yy.c y.tab.c ast.c sem.cpp
 
-# $(LLVMCODE): $(LLVMCODE).o
-# 	$(CLANG) $(CDC) $(LLVMCODE).o $(OBJS) -o $@
+ir_gen.o: ir_gen.cpp ir_gen.h
+	$(CLANG) $(LOGD) $(OPTD) -g $(LDC) -c ir_gen.cpp -o $@
 
-$(LLVMCODE).o: $(LLVMCODE).cpp $(LLVMCODE).h
-	$(CLANG) $(LOGD) $(OPTD) -g $(LOGD) $(LDC) -c $(LLVMCODE).cpp
-
-# llvm_file: test_llvm/$(TEST).c
-# 	$(CLANG) -S -emit-llvm test_llvm/$(TEST).c -o test_llvm/$(TEST).ll
+optimizer.o: optimizer.cpp optimizer.h
+	$(CLANG) $(LOGD) $(OPTD) -g $(LDC) -c optimizer.cpp -o $@
 
 run:
 	make all
-	./$(source).out semantic_tests/$(TEST).c > $(TEST).ll
-	clang main.c $(TEST).ll -o $(TEST).out
-	./$(TEST).out
+	./$(source).out semantic_tests/$(TEST).c $(TEST).ll
+	clang -g main.c $(TEST).ll -o $(TEST).out
+	time ./$(TEST).out
 
 mem:
 	make all
-	$(MEM_CHECK) ./$(LLVMCODE) test_llvm/$(TEST).ll test_llvm/$(TEST)_out.ll
+	$(MEM_CHECK) ./$(TEST).out
 
 debug:
 	make all
-	$(DEBUGGER) ./$(LLVMCODE) test_llvm/$(TEST).ll test_llvm/$(TEST)_out.ll
+	$(DEBUGGER) ./$(TEST).out
 
 clean:
 	rm -rf lex.yy.c
@@ -66,5 +63,5 @@ clean:
 	rm -rf $(source).out y.output
 	rm -rf $(source).out y.output
 	rm -rf out*.c
-	rm -rf *TRACE *.ll test_llvm/*.ll
-	rm -rf $(LLVMCODE) *.o *.gch
+	rm -rf *TRACE *.ll
+	rm -rf *.o *.gch *.out

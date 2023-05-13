@@ -1,16 +1,22 @@
-extern int read();
 extern void print(int);
+extern int read();
 
-int test(int m){
+int test(int m)
+{
 	int a;
 	int b;
-	b = read();
-	print(b);
-	if (m < 5){
-		a = m;
+	a = 20;
+	if (m > a)
+	{
+		b = a;
+		a = m - 6;
+		return (a);
 	}
-	else {
-		a = 5;
+	else
+	{
+		a = m + 6;
+		return(19);
 	}
-	return(a);
+
+	return (a);
 }

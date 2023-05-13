@@ -1,5 +1,5 @@
 /**
- * @file optimizer.c
+ * @file optimizer.cpp
  * @author Rehoboth Okorie
  * @brief optimizer with LLVM
  * constant folding
@@ -14,21 +14,6 @@
  *
  */
 
-#include <llvm/IR/Type.h>
-#include <llvm/IR/Value.h>
-#include <llvm/IR/Module.h>
-#include <llvm/IR/LLVMContext.h>
-#include <llvm/IRReader/IRReader.h>
-#include <llvm/IR/IRBuilder.h>
-#include <llvm/Support/SourceMgr.h>
-#include <llvm/Support/Error.h>
-#include <llvm/IR/Constants.h>
-#include <llvm/IR/Instruction.h>
-#include <llvm/IR/Instructions.h>
-#include <llvm/IR/BasicBlock.h>
-#include <llvm/IR/Function.h>
-#include <llvm/Support/raw_ostream.h>
-#include <llvm/Support/raw_os_ostream.h>
 #include "optimizer.h"
 
 using namespace std;
@@ -38,6 +23,30 @@ void log(string s)
 #ifdef LOG
 	cout << s << endl;
 #endif
+}
+
+void generateKillGen(set<llvm::Instruction *> &gen,
+										 set<llvm::Instruction *> &kill,
+										 map<llvm::Value *, set<llvm::Value *> *> &store,
+										 llvm::BasicBlock &block)
+{
+	for (llvm::Instruction &inst : block)
+	{
+		unsigned opCode = inst.getOpcode();
+		if (opCode == llvm::Instruction::Store)
+		{
+			gen.insert(&inst);
+			llvm::Value *op1 = inst.getOperand(0);
+			llvm::Value *op2 = inst.getOperand(1);
+			if (store[op2] != nullptr)
+			{
+				set<llvm::Value *> *killed = store[op2];
+				killed->insert(killed->begin(), killed->end());
+			}
+			store[op2] = new set<llvm::Value *>();
+			store[op2]->insert(&inst);
+		}
+	}
 }
 
 string getInstructionString(llvm::Instruction &inst)
@@ -55,8 +64,13 @@ void eliminateCommonSubExpression(llvm::BasicBlock &basicBlock, bool &change)
 	for (llvm::Instruction &inst : basicBlock)
 	{
 		unsigned opCode = inst.getOpcode();
+		if (inst.getNumOperands() == 0)
+		{
+			continue;
+		}
 		llvm::Value *op1 = inst.getOperand(0);
 		llvm::Value *op2 = nullptr;
+
 		if (inst.getNumOperands() > 1)
 		{
 			op2 = inst.getOperand(1);
@@ -112,7 +126,7 @@ void eliminateCommonSubExpression(llvm::BasicBlock &basicBlock, bool &change)
 
 void eliminateDeadCode(llvm::BasicBlock &basicBlock, bool &change)
 {
-	vector<llvm::Instruction *> toErase;
+	set<llvm::Instruction *> toErase;
 	for (llvm::Instruction &inst : basicBlock)
 	{
 		unsigned opCode = inst.getOpcode();
@@ -123,7 +137,7 @@ void eliminateDeadCode(llvm::BasicBlock &basicBlock, bool &change)
 									opCode != llvm::Instruction::Ret);
 		if (inst.hasNUses(0) && check)
 		{
-			toErase.push_back(&inst);
+			toErase.insert(&inst);
 			change = true;
 		}
 	}
@@ -138,6 +152,10 @@ void constantFolding(llvm::BasicBlock &basicBlock, bool &change)
 {
 	for (llvm::Instruction &inst : basicBlock)
 	{
+		if (inst.getNumOperands() == 0)
+		{
+			continue;
+		}
 		llvm::Value *op1 = inst.getOperand(0);
 		llvm::Value *op2 = nullptr;
 		if (inst.getNumOperands() > 1)
@@ -185,75 +203,89 @@ void constantFolding(llvm::BasicBlock &basicBlock, bool &change)
 
 void constantPropagation(llvm::Function &func, bool &change)
 {
-	map<llvm::Value *, llvm::ConstantInt *> constants;
-	vector<llvm::Instruction *> toErase;
-	for (llvm::BasicBlock &basicBlock : func)
+	map<llvm::BasicBlock *, set<llvm::Instruction *>> kill, gen, ins, outs;
+	map<llvm::Value *, set<llvm::Value *> *> store;
+
+	// generate kill gen
+	for (llvm::BasicBlock &block : func)
 	{
-		for (llvm::Instruction &inst : basicBlock)
+		generateKillGen(gen[&block], kill[&block], store, block);
+		outs[&block] = gen[&block];
+	}
+	for (llvm::BasicBlock &block : func)
+	{
+		bool tempChange = true;
+		do
+		{
+			tempChange = false;
+			// union of predecessor of block
+			for_each(
+					llvm::pred_begin(&block),
+					llvm::pred_end(&block),
+					[&ins, &outs, &block](llvm::BasicBlock *pred)
+					{
+						set<llvm::Instruction *> bOut = outs[pred];
+						ins[&block].insert(bOut.begin(), bOut.end());
+					});
+
+			// difference of in and kill
+			set<llvm::Instruction *> oldOut = outs[&block];
+			set<llvm::Instruction *> diff;
+			for (llvm::Instruction *inst : ins[&block])
+			{
+				if (kill[&block].find(inst) == kill[&block].end())
+				{
+					diff.insert(inst);
+				}
+			}
+
+			// union(out, diff(in, kill))
+			outs[&block] = gen[&block];
+			outs[&block].insert(diff.begin(), diff.end());
+
+			// diff(out, old_out)
+			if (outs[&block].size() != oldOut.size())
+			{
+				tempChange = true;
+			}
+			// break;
+		} while (tempChange);
+	}
+
+	set<llvm::Instruction *> toErase;
+	for (llvm::BasicBlock &block : func)
+	{
+		set<llvm::Instruction *> R = ins[&block];
+		for (llvm::Instruction &inst : block)
 		{
 			unsigned opCode = inst.getOpcode();
-			llvm::Value *op1 = inst.getOperand(0);
-			llvm::Value *op2 = nullptr;
-			if (inst.getNumOperands() > 1)
+			if (opCode == llvm::Instruction::Store)
 			{
-				op2 = inst.getOperand(1);
+				erase_if(R, [&inst](llvm::Instruction *x)
+								 { return x->getOperand(1) == inst.getOperand(1); });
+				R.insert(&inst);
 			}
-			llvm::ConstantInt *const1 = dyn_cast<llvm::ConstantInt>(op1);
-			switch (opCode)
+			if (opCode == llvm::Instruction::Load)
 			{
-			case llvm::Instruction::Store:
-				if (const1)
-				{
-					if (constants[op2] != nullptr && const1->getValue() == constants[op2]->getValue())
-					{
-						toErase.push_back(&inst);
-					}
-					else
-					{
-						constants[op2] = const1;
-					}
-				}
-				else if (constants[op2] != nullptr)
-				{
-					constants.erase(op2);
-				}
-				break;
-			case llvm::Instruction::Load:
-				if (const1)
-				{
-					log(string{"CP -> "} + getInstructionString(inst));
-					inst.replaceAllUsesWith(const1);
-					change = true;
-				}
-				else if (constants[op1] != nullptr)
-				{
-					log(string{"CP -> "} + getInstructionString(inst));
-					inst.replaceAllUsesWith(constants[op1]);
-					change = true;
-				}
-			default:
-				break;
+				llvm::ConstantInt *constVal = nullptr;
+				find_if(R,
+								[&inst, &toErase](llvm::Instruction *x)
+								{
+									llvm::ConstantInt *constOp = dyn_cast<llvm::ConstantInt>(x->getOperand(0));
+									if (constOp != nullptr && inst.getOperand(0) == x->getOperand(1))
+									{
+										inst.replaceAllUsesWith((llvm::Value *)constOp);
+										toErase.insert(&inst);
+									}
+									return false;
+								});
 			}
 		}
 	}
 	for (llvm::Instruction *inst : toErase)
 	{
-		log(string{"CSE -> "} + getInstructionString(*inst));
 		inst->eraseFromParent();
 	}
-}
-
-unique_ptr<llvm::Module> createModule(string irFileName, llvm::LLVMContext &context)
-{
-	llvm::SMDiagnostic error;
-	unique_ptr<llvm::Module> module = llvm::parseIRFile(irFileName, error, context);
-	if (!module)
-	{
-		llvm::errs() << "Error reading IR file " << irFileName << ":\n";
-		error.print("createModule", llvm::errs());
-		exit(1);
-	}
-	return module;
 }
 
 void optimizeModule(llvm::Module &module)
@@ -275,329 +307,3 @@ void optimizeModule(llvm::Module &module)
 		} while (change);
 	}
 }
-
-void saveModule(unique_ptr<llvm::Module> &module, const string fileName)
-{
-	ofstream out(fileName);
-	llvm::raw_os_ostream os(out);
-	module->print(os, nullptr);
-}
-
-void runOptimizer(string irInFileName, string irOutFileName)
-{
-	llvm::LLVMContext context;
-	unique_ptr<llvm::Module> module = createModule(irInFileName, context);
-	if (module)
-	{
-		optimizeModule(*(module.get()));
-		if (irOutFileName.size())
-		{
-			saveModule(module, irOutFileName);
-		}
-		else
-		{
-			module->print(llvm::outs(), nullptr);
-		}
-		module.reset();
-	}
-}
-
-astNode *getBlockEnd(astNode *node)
-{
-	if (node->type == ast_stmt && node->stmt.type == ast_block)
-	{
-		return node->stmt.block.stmt_list->back();
-	}
-	return node;
-}
-
-llvm::Value *parseExpression(llvm::IRBuilder<> &builder, astNode *node, map<string, llvm::Value *> allocaMap, map<string, llvm::Function *> functionMap)
-{
-	assert(node);
-	switch (node->type)
-	{
-	case ast_stmt:
-	{
-		switch (node->stmt.type)
-		{
-		case ast_call:
-		{
-			astCall call = node->stmt.call;
-			llvm::Function *callFunc = functionMap[call.name];
-			if (callFunc)
-			{
-				std::vector<llvm::Value *> args = {};
-				if (call.param)
-				{
-					args.push_back(parseExpression(builder, call.param, allocaMap, functionMap));
-				}
-				return builder.CreateCall(callFunc, args);
-			}
-		}
-		default:
-			break;
-		}
-		break;
-	}
-	case ast_bexpr:
-	{
-		llvm::Value *lhs = parseExpression(builder, node->bexpr.lhs, allocaMap, functionMap);
-		llvm::Value *rhs = parseExpression(builder, node->bexpr.rhs, allocaMap, functionMap);
-		llvm::Instruction::BinaryOps op;
-
-		switch (node->bexpr.op)
-		{
-		case add:
-			op = llvm::Instruction::Add;
-			break;
-		case sub:
-			op = llvm::Instruction::Sub;
-			break;
-		case mul:
-			op = llvm::Instruction::Mul;
-			break;
-		case divide:
-			op = llvm::Instruction::SDiv;
-			break;
-		default:
-			break;
-		}
-		return builder.CreateBinOp(op, lhs, rhs);
-	}
-	case ast_uexpr:
-	{
-		llvm::Value *uexpr = parseExpression(builder, node->uexpr.expr, allocaMap, functionMap);
-		op_type op = node->uexpr.op;
-		switch (op)
-		{
-		case add:
-		{
-			return uexpr;
-		}
-		case sub:
-		{
-			return builder.CreateUnOp(llvm::Instruction::UnaryOps::UnaryOpsEnd, uexpr);
-		}
-		default:
-			break;
-		}
-	}
-	case ast_cnst:
-	{
-		return builder.getInt32(node->cnst.value);
-	}
-	case ast_var:
-	{
-		llvm::Value *allocaP = allocaMap[string{node->var.name}];
-		return builder.CreateLoad(builder.getInt32Ty(), allocaP, false);
-	}
-	default:
-		break;
-	}
-	return nullptr;
-}
-
-void llvmBackendCaller(astNode *node)
-{
-	if (node->type != ast_prog)
-	{
-		cerr << "Wrong type or astNode. Must begin with an ast_prog" << endl;
-		exit(1);
-	}
-	llvm::LLVMContext context;
-	llvm::Module *module = new llvm::Module("Prog", context);
-	map<string, llvm::Function *> functionMap;
-	llvm::IRBuilder<> builder(context);
-
-	astProg prog = node->prog;
-	astFunc func = prog.func->func;
-
-	llvm::Type *retType = string{func.type} == string{"int"} ? builder.getInt32Ty() : builder.getVoidTy();
-	std::vector<llvm::Type *> argTypes;
-	if (func.param != nullptr)
-	{
-		argTypes.push_back(builder.getInt32Ty());
-	}
-	llvm::FunctionType *funcType = llvm::FunctionType::get(retType, argTypes, false);
-	llvm::Function *llvmFunc = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, func.name, module);
-	functionMap[func.name] = llvmFunc;
-	vector<astNode *> nodeStack{func.body, prog.ext1, prog.ext2};
-	vector<vector<astNode *>> blockStack;
-	map<astNode *, tuple<llvm::BasicBlock *, llvm::BasicBlock *>> blockSuccessionMap;
-	map<string, llvm::Value *> allocaMap;
-	map<astNode *, llvm::BasicBlock *> blockNodeMap;
-	llvm::BasicBlock *fb = nullptr;
-	while (nodeStack.size() || blockStack.size())
-	{
-		astNode *node = nodeStack.back();
-		nodeStack.pop_back();
-		if (node == nullptr)
-		{
-			continue;
-		}
-		switch (node->type)
-		{
-		case ast_extern:
-		{
-			string name = string{node->ext.name};
-			std::vector<llvm::Type *> extArgTypes;
-			if (name == string{"print"})
-			{
-				extArgTypes.push_back(builder.getInt32Ty());
-			}
-			llvm::Type *extRetType = name == string{"read"} ? builder.getInt32Ty() : builder.getVoidTy();
-			llvm::FunctionType *extType = llvm::FunctionType::get(extRetType, extArgTypes, false);
-			llvm::Function *extFunc = llvm::Function::Create(extType, llvm::Function::ExternalLinkage, name, module);
-			functionMap[name] = extFunc;
-			break;
-		}
-		case ast_stmt:
-			switch (node->stmt.type)
-			{
-			case ast_call:
-				parseExpression(builder, node, allocaMap, functionMap);
-				break;
-			case ast_block:
-			{
-				llvm::BasicBlock *block;
-				if (blockNodeMap[node])
-				{
-					block = blockNodeMap[node];
-				}
-				else
-				{
-					block = llvm::BasicBlock::Create(context, "", llvmFunc);
-				}
-				builder.SetInsertPoint(block);
-				if (llvmFunc->size() == 1 && func.param != nullptr)
-				{
-					astVar var = func.param->var;
-					llvm::Value *allocaP = builder.CreateAlloca(llvm::Type::getInt32Ty(context), 0, nullptr, string{var.name});
-					llvm::Value *funcParamValue = llvmFunc->arg_begin();
-					builder.CreateStore(funcParamValue, allocaP, false);
-					allocaMap[string{var.name}] = allocaP;
-				}
-				else if (llvmFunc->size() > 1)
-				{
-					blockStack.push_back(nodeStack);
-					nodeStack = vector<astNode *>{};
-				}
-				vector<astNode *> stmts = *(node->stmt.block.stmt_list);
-				for (auto it = stmts.rbegin(); it != stmts.rend(); it++)
-				{
-					nodeStack.push_back(*it);
-				}
-				break;
-			}
-			case ast_asgn:
-			{
-				llvm::Value *lhs = allocaMap[string{node->stmt.asgn.lhs->var.name}];
-				llvm::Value *rhs = parseExpression(builder, node->stmt.asgn.rhs, allocaMap, functionMap);
-				builder.CreateStore(rhs, lhs, false);
-				break;
-			}
-			case ast_while:
-				break;
-			case ast_if:
-			{
-				astIf ifNode = node->stmt.ifn;
-				astRExpr rexpr = ifNode.cond->rexpr;
-				llvm::Value *lhs = parseExpression(builder, rexpr.lhs, allocaMap, functionMap);
-				llvm::Value *rhs = parseExpression(builder, rexpr.rhs, allocaMap, functionMap);
-				;
-				llvm::Value *cond;
-				switch (rexpr.op)
-				{
-				case lt:
-					cond = builder.CreateICmpSLT(lhs, rhs, "");
-					break;
-				case gt:
-					cond = builder.CreateICmpSGT(lhs, rhs, "");
-					break;
-				case le:
-					cond = builder.CreateICmpSLE(lhs, rhs, "");
-					break;
-				case ge:
-					cond = builder.CreateICmpSGE(lhs, rhs, "");
-					break;
-				case eq:
-					cond = builder.CreateICmpEQ(lhs, rhs, "");
-					break;
-				case neq:
-					cond = builder.CreateICmpNE(lhs, rhs, "");
-					break;
-				default:
-					break;
-				}
-
-				llvm::BasicBlock *ifBlock = llvm::BasicBlock::Create(context, "", llvmFunc);
-				llvm::BasicBlock *elseBlock = nullptr;
-				blockNodeMap[ifNode.if_body] = ifBlock;
-				if (ifNode.else_body)
-				{
-					elseBlock = llvm::BasicBlock::Create(context, "", llvmFunc);
-					llvm::BasicBlock *finalBlock = llvm::BasicBlock::Create(context, "", llvmFunc);
-					fb = finalBlock;
-					builder.CreateCondBr(cond, ifBlock, elseBlock);
-					blockSuccessionMap[getBlockEnd(ifNode.if_body)] = make_tuple(elseBlock, finalBlock);
-					blockSuccessionMap[getBlockEnd(ifNode.else_body)] = make_tuple(finalBlock, finalBlock);
-					blockNodeMap[ifNode.else_body] = elseBlock;
-					nodeStack.push_back(ifNode.else_body);
-				}
-				else
-				{
-					llvm::BasicBlock *finalBlock = llvm::BasicBlock::Create(context, "", llvmFunc);
-					fb = finalBlock;
-					builder.CreateCondBr(cond, ifBlock, finalBlock);
-					blockSuccessionMap[getBlockEnd(ifNode.if_body)] = make_tuple(finalBlock, finalBlock);
-				}
-				nodeStack.push_back(ifNode.if_body);
-			}
-			break;
-			case ast_ret:
-			{
-				llvm::Value *retexpr = parseExpression(builder, node->stmt.ret.expr, allocaMap, functionMap);
-				builder.CreateRet(retexpr);
-				break;
-			}
-			case ast_decl:
-			{
-				string varName{node->stmt.decl.name};
-				llvm::Value *allocaP = builder.CreateAlloca(builder.getInt32Ty(), nullptr, varName);
-				allocaMap[varName] = allocaP;
-				break;
-			}
-			default:
-				break;
-			}
-			break;
-		default:
-			break;
-		}
-		if (nodeStack.empty() && !blockStack.empty())
-		{
-			nodeStack = blockStack.back();
-			blockStack.pop_back();
-		}
-		if (blockSuccessionMap.find(node) != blockSuccessionMap.end())
-		{
-			tuple<llvm::BasicBlock *, llvm::BasicBlock *> nextBr = blockSuccessionMap[node];
-			builder.CreateBr(get<1>(nextBr));
-			builder.SetInsertPoint(get<0>(nextBr));
-		}
-	}
-	module->print(llvm::outs(), nullptr);
-	// optimizeModule(*module);
-	// module->print(llvm::outs(), nullptr);
-}
-
-#ifdef OPTIMIZER
-int main(int argc, char **argv)
-{
-	if (argc >= 2)
-	{
-		runOptimizer(string{argv[1]}, argc == 3 ? string{argv[2]} : string{""});
-	}
-	return 0;
-}
-#endif

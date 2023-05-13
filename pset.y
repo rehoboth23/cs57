@@ -1,11 +1,7 @@
 %{
 #include <stdio.h>
-// #include <iostream>
-// #include "ast.h"
-// #include "vector"
 #include "sem.h"
-#include "optimizer.h"
-// #include <assert.h>
+#include "ir_gen.h"
 
 void yyerror(const char *);
 extern int yylex();
@@ -28,7 +24,7 @@ astNode *root;
 %token <ival> NUM
 %token <vname> VAR TYPE
 
-%type <vec_ptr>  statements variable_declarations
+%type <vec_ptr>  statements
 %type <nptr> program extern_print extern_read function function_definition if_else loop if_statment else_statement code_block statement variable_declaration assignment function_call expr arithmetic condition parameter operand unary
 
 %left ADD SUB
@@ -111,10 +107,7 @@ else_statement: ELSE statement {
 }
 
 // code block with var declarations at the start
-code_block: block_start variable_declarations statements block_end {
-	$2->insert($2->end(), $3->begin(), $3->end());
-	$3->clear();
-	delete($3);
+code_block: block_start statements block_end {
 	$$ = createBlock($2);
 }
 
@@ -131,10 +124,7 @@ statements: statements statement {
 						$$ = $1;
 						$$->push_back($2);
 					}
-					| statement {
-						$$ = new vector<astNode*>();
-						$$->push_back($1);
-					}
+					| {$$ = new vector<astNode*>();}
 
 // statement can be assignmemnt function call if_else loop or code block
 statement: assignment {
@@ -154,13 +144,10 @@ statement: assignment {
 					}
 					| RETURN '(' expr ')' ';' {
 						$$ = createRet($3);
+					} 
+					| variable_declaration {
+						$$ = $1;
 					}
-
-variable_declarations: variable_declarations variable_declaration {
-												$$ = $1;
-												$$->push_back($2);
-											}
-											| {$$ = new vector<astNode*>();}
 
 // variable declaration with new line at the end
 variable_declaration: TYPE VAR ';' {
@@ -224,8 +211,11 @@ unary: SUB operand %prec UNARY {$$ = createUExpr($2, uminus);}
 int main(int argc, char** argv){
 	
 	// yydebug = 1;
-	if (argc == 2){
+	if (argc == 3){
 		yyin = fopen(argv[1], "r");
+	} else {
+		fprintf(stderr, "Invalid number of argument ./? <input_file> [output_file]");
+		exit(1);
 	}
 	root = nullptr;
 	yyparse();
@@ -233,7 +223,7 @@ int main(int argc, char** argv){
 		analyzer_t *analyzer = createAnalyzer();
 		analyze(analyzer, root);
 		deleteAnalyzer(analyzer);
-		llvmBackendCaller(root);
+		generateIR(root, string{argv[2]});
 		freeNode(root);
 	} else {
 		

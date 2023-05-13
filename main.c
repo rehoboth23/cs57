@@ -16,7 +16,7 @@ int read()
 
 int main()
 {
-	int i = test(4);
+	int i = test(21);
 	printf("In main printing return value of test: %d\n", i);
 	return 0;
 }
