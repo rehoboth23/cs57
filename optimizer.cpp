@@ -282,10 +282,8 @@ void constantPropagation(llvm::Function &func, bool &change)
 			}
 		}
 	}
-	for (llvm::Instruction *inst : toErase)
-	{
-		inst->eraseFromParent();
-	}
+	for_each(toErase, [](llvm::Instruction *inst)
+					 { inst->eraseFromParent(); });
 }
 
 void optimizeModule(llvm::Module &module)
