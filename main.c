@@ -1,6 +1,6 @@
 #include <stdio.h>
 
-int test(int);
+int add(int, int);
 
 void print(int i)
 {
@@ -16,7 +16,7 @@ int read()
 
 int main()
 {
-	int i = test(21);
+	int i = add(3, 4);
 	printf("In main printing return value of test: %d\n", i);
 	return 0;
 }

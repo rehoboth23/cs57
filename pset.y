@@ -20,17 +20,20 @@ astNode *root;
 	vector<astNode *> *vec_ptr;
 }
 
-%token IF ELSE WHILE LT GT LTE GTE EQ NEQ ADD SUB MUL DIV EXTERN RETURN
+%token NEQ ADD SUB MUL DIV EXTERN RETURN COMMA
+%token IF ELSE WHILE LT GT LTE GTE EQ
 %token <ival> NUM
 %token <vname> VAR TYPE
 
-%type <vec_ptr>  statements
-%type <nptr> program extern_print extern_read function function_definition if_else loop if_statment else_statement code_block statement variable_declaration assignment function_call expr arithmetic condition parameter operand unary
+%type <vec_ptr>  statements exprs func_args
+%type <nptr> program func_arg extern_print extern_read function function_definition if_else loop
+%type <nptr> if_statment else_statement code_block statement variable_declaration assignment function_call
+%type <nptr> expr arithmetic condition parameter operand unary
 
-%left ADD SUB
 %left MUL DIV
+%left ADD
+%right SUB
 
-%nonassoc UNARY
 %nonassoc IFX
 %nonassoc ELSE
 %start program
@@ -71,18 +74,31 @@ function: function_definition code_block {
 }
 
 // a function definition
-function_definition: TYPE VAR '(' TYPE VAR ')' {
-											astNode *var = createVar($5);
-											$$ = createFunc($2, $1, var, nullptr);
+function_definition: TYPE VAR '(' func_args ')' {
+											$$ = createFunc($2, $1, $4, nullptr);
 											free($2);
-											// free($1);
-											free($5);
+											free($1);
+											// free($5);
 										}
 										| TYPE VAR '(' ')' {
 											$$ = createFunc($2, $1, nullptr, nullptr);
 											free($2);
-											// free($1);
+											free($1);
 										}
+
+func_args: func_args COMMA func_arg {
+	$$ = $1;
+	$$->push_back($3);
+}
+| func_arg {{
+	$$ = new vector<astNode *>();
+	$$->push_back($1);
+}}
+
+func_arg: TYPE VAR {
+	$$ = createVar($2);
+	free($2);
+}
 
 // a loop (while) block
 loop: WHILE '(' condition ')' code_block {$$ = createWhile($3, $5);}
@@ -144,7 +160,9 @@ statement: assignment {
 					}
 					| RETURN '(' expr ')' ';' {
 						$$ = createRet($3);
-					} 
+					} | RETURN expr ';' {
+						$$ = createRet($2);
+					}
 					| variable_declaration {
 						$$ = $1;
 					}
@@ -168,7 +186,7 @@ assignment: VAR '=' expr ';' {
 					}
 
 // a function call
-function_call: VAR '(' expr ')' {
+function_call: VAR '(' exprs ')' {
 								$$ = createCall($1, $3);
 								free($1);
 							}
@@ -177,8 +195,17 @@ function_call: VAR '(' expr ')' {
 								free($1);
 							}
 
+exprs: exprs COMMA expr {
+				$$ = $1;
+				$$->push_back($3);
+			}
+			| expr {
+				$$ = new vector<astNode*>();
+				$$->push_back($1);
+			}
+
 expr: arithmetic {$$ = $1;}
-			| parameter {$$ = $1;}
+			| parameter  {$$ = $1;}
 
 // arithmetic operations
 arithmetic: parameter ADD parameter {$$ = createBExpr($1, $3, add);}
@@ -198,14 +225,15 @@ parameter: operand {$$ = $1;}
 					| unary {$$ = $1;}
 
 // operand can be number or variable
-operand: NUM {$$ = createCnst($1);}
-				| VAR {
-					$$ = createVar($1);
-					free($1);
-				}
+operand: NUM {
+	$$ = createCnst($1);
+} | VAR {
+		$$ = createVar($1);
+		free($1);
+	}
 
 // unary opwrations
-unary: SUB operand %prec UNARY {$$ = createUExpr($2, uminus);}
+unary: SUB operand {$$ = createUExpr($2, uminus);}
 %%
 
 int main(int argc, char** argv){

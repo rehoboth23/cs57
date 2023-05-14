@@ -31,8 +31,10 @@ void freeProg(astNode *node)
 {
 	assert(node != NULL && node->type == ast_prog);
 
-	if(node->prog.ext1) freeExtern(node->prog.ext1);
-	if(node->prog.ext2) freeExtern(node->prog.ext2);
+	if (node->prog.ext1)
+		freeExtern(node->prog.ext1);
+	if (node->prog.ext2)
+		freeExtern(node->prog.ext2);
 	freeFunc(node->prog.func);
 
 	free(node);
@@ -40,7 +42,7 @@ void freeProg(astNode *node)
 }
 
 /*create and free functions for ast_func type astNode */
-astNode *createFunc(const char *name, const char *type, astNode *param, astNode *body)
+astNode *createFunc(const char *name, const char *type, vector<astNode *> *params, astNode *body)
 {
 	astNode *node;
 	node = (astNode *)calloc(1, sizeof(astNode));
@@ -52,7 +54,7 @@ astNode *createFunc(const char *name, const char *type, astNode *param, astNode 
 	node->func.type = (char *)calloc(1, sizeof(char) * (strlen(type) + 1));
 	strcpy(node->func.type, type);
 
-	node->func.param = param;
+	node->func.params = params;
 	node->func.body = body;
 
 	return node;
@@ -64,8 +66,15 @@ void freeFunc(astNode *node)
 
 	free(node->func.name);
 	free(node->func.type);
-	if (node->func.param != NULL)
-		freeVar(node->func.param);
+	if (node->func.params != NULL)
+	{
+		for (astNode *param : *node->func.params)
+		{
+			freeNode(param);
+		}
+	}
+
+	free(node->func.params);
 
 	freeBlock(node->func.body);
 
@@ -218,7 +227,7 @@ void freeUExpr(astNode *node)
 }
 
 /* create and free functions for a statement of type ast_call */
-astNode *createCall(const char *name, astNode *param)
+astNode *createCall(const char *name, vector<astNode *> *params)
 {
 	astNode *node;
 	node = (astNode *)calloc(1, sizeof(astNode));
@@ -228,7 +237,7 @@ astNode *createCall(const char *name, astNode *param)
 	node->stmt.call.name = (char *)calloc(strlen(name) + 1, sizeof(char));
 	strcpy(node->stmt.call.name, name);
 
-	node->stmt.call.param = param;
+	node->stmt.call.params = params;
 
 	return node;
 }
@@ -239,8 +248,13 @@ void freeCall(astNode *node)
 	assert(node->stmt.type == ast_call);
 
 	free(node->stmt.call.name);
-	if (node->stmt.call.param != NULL)
-		freeNode(node->stmt.call.param);
+	if (node->stmt.call.params != NULL)
+	{
+		for (astNode *param : *node->stmt.call.params)
+		{
+			freeNode(param);
+		}
+	}
 
 	free(node);
 	return;
@@ -517,8 +531,14 @@ void printNode(astNode *node, int n)
 	case ast_func:
 	{
 		printf("%sFunc: %s\n", indent, node->func.name);
-		if (node->func.param != NULL)
-			printNode(node->func.param, n + 1);
+		if (node->func.params != NULL)
+		{
+			printf("%sFunc Params:\n", indent);
+			for (astNode *param : *node->func.params)
+			{
+				printNode(param, n + 1);
+			}
+		}
 
 		printNode(node->func.body, n + 1);
 		break;
@@ -584,10 +604,14 @@ void printStmt(astStmt *stmt, int n)
 	case ast_call:
 	{
 		printf("%sCall: name %s\n", indent, stmt->call.name);
-		if (stmt->call.param != NULL)
+		if (stmt->call.params != NULL)
 		{
-			printf("%sCall: param\n", indent);
-			printNode(stmt->call.param, n + 1);
+			printf("%sCall Params:\n", indent);
+			for (astNode *param : *stmt->call.params)
+			{
+				printNode(param, n + 1);
+			}
+			
 		}
 		break;
 	}

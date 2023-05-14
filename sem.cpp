@@ -167,9 +167,12 @@ void analyze(analyzer_t *analyzer, astNode *tree)
     char *name = tree->func.name;
     addCall(analyzer, name);
     addNewTable(analyzer);
-    if (tree->func.param != NULL)
+    if (tree->func.params != nullptr)
     {
-      addToAnalyzer(analyzer, tree->func.param->var.name);
+      for (astNode *param : *tree->func.params)
+      {
+        addToAnalyzer(analyzer, param->var.name);
+      }
     }
     analyze(analyzer, tree->func.body);
     removeTopTable(analyzer);
@@ -214,10 +217,16 @@ void analyze(analyzer_t *analyzer, astNode *tree)
       char *name = call.name;
       if (!searchCall(analyzer, name))
       {
-        cerr << "Unidentified call -> " << string{name} << endl;
-        exit(1);
+        cerr << "External call -> " << string{name} << endl;
       }
-      analyze(analyzer, tree->stmt.call.param);
+      else
+      {
+        for (astNode *param : *tree->stmt.call.params)
+        {
+          analyze(analyzer, param);
+        }
+      }
+
       break;
     }
     case ast_decl:

@@ -58,7 +58,9 @@ empty 					^[ \t]*\n$
 	// printf("%s", yytext);
 	return WHILE;
 }
-
+"," {
+	return COMMA;
+}
 "*" {
 	// printf("%s", yytext);
 	return MUL;

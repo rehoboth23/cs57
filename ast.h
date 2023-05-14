@@ -71,7 +71,7 @@ typedef struct
 {
 	char *name;			// name of the function
 	char *type;			// name of the function
-	astNode *param; // parameter, possibly NULL if the function doesn't take a param
+	vector<astNode *> *params; // parameter, possibly NULL if the function doesn't take a param
 	astNode *body;	// function body
 } astFunc;
 
@@ -114,7 +114,7 @@ typedef struct
 typedef struct
 {
 	char *name;
-	astNode *param; // For read function this field will be NULL
+	vector<astNode *> *params;
 } astCall;
 
 typedef struct
@@ -163,6 +163,8 @@ struct ast_Stmt
 		astIf ifn;
 		astDecl decl;
 		astAsgn asgn;
+		// astAsgn address;
+		// astAsgn pointer;
 	};
 };
 
@@ -189,7 +191,7 @@ defined above. All the create* functions return a astNode*.
 */
 
 astNode *createProg(astNode *extern1, astNode *extern2, astNode *func);
-astNode *createFunc(const char *name, const char *type, astNode *param, astNode *body);
+astNode *createFunc(const char *name, const char *type, vector<astNode *> *params, astNode *body);
 astNode *createExtern(const char *name);
 astNode *createVar(const char *name);
 astNode *createCnst(int value);
@@ -204,7 +206,7 @@ other create functions these functions return
 a astNode*.
 */
 
-astNode *createCall(const char *name, astNode *param = NULL);
+astNode *createCall(const char *name, vector<astNode *> *params = NULL);
 astNode *createRet(astNode *expr);
 astNode *createBlock(vector<astNode *> *stmt_list);
 astNode *createWhile(astNode *cond, astNode *body);

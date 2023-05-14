@@ -14,13 +14,15 @@
 
 using namespace std;
 
-void moveTop(llvm::Instruction*& top, llvm::Instruction *toMove)
+void moveTop(llvm::Instruction *&top, llvm::Instruction *toMove)
 {
 	toMove->moveAfter(top);
 	top = toMove;
 }
 
-llvm::Value *parseExpression(llvm::IRBuilder<> &builder, astNode *node, map<string, llvm::Value *> allocaMap, map<string, llvm::Function *> functionMap)
+llvm::Value *parseExpression(llvm::IRBuilder<> &builder,
+														 astNode *node, map<string, llvm::Value *> allocaMap,
+														 map<string, llvm::Function *>& functionMap)
 {
 	assert(node);
 	switch (node->type)
@@ -32,16 +34,33 @@ llvm::Value *parseExpression(llvm::IRBuilder<> &builder, astNode *node, map<stri
 		case ast_call:
 		{
 			astCall call = node->stmt.call;
-			llvm::Function *callFunc = functionMap[call.name];
-			if (callFunc)
+			string name = string{call.name};
+			llvm::Function *callFunc = functionMap[name];
+			std::vector<llvm::Value *> args = {};
+			if (call.params)
 			{
-				std::vector<llvm::Value *> args = {};
-				if (call.param)
+				for (astNode *param : *call.params)
 				{
-					args.push_back(parseExpression(builder, call.param, allocaMap, functionMap));
+					args.push_back(parseExpression(builder, param, allocaMap, functionMap));
 				}
-				return builder.CreateCall(callFunc, args);
 			}
+			if (callFunc == nullptr)
+			{
+				std::vector<llvm::Type *> argTypes;
+				if (call.params)
+				{
+					for (astNode *p : *call.params)
+					{
+						argTypes.push_back(builder.getInt32Ty());
+					}
+				}
+				llvm::Type *retType = builder.getInt32Ty();
+				llvm::FunctionType *extType = llvm::FunctionType::get(retType, argTypes, false);
+				llvm::Module *module = builder.GetInsertBlock()->getParent()->getParent();
+				callFunc = llvm::Function::Create(extType, llvm::Function::ExternalLinkage, name, module);
+				functionMap[name] = callFunc;
+			}
+			return builder.CreateCall(callFunc, args);
 		}
 		default:
 			break;
@@ -96,6 +115,29 @@ llvm::Value *parseExpression(llvm::IRBuilder<> &builder, astNode *node, map<stri
 		llvm::Value *allocaP = allocaMap[string{node->var.name}];
 		return builder.CreateLoad(builder.getInt32Ty(), allocaP, false);
 	}
+	case ast_rexpr:
+	{
+		llvm::Value *lhs = parseExpression(builder, node->rexpr.lhs, allocaMap, functionMap);
+		llvm::Value *rhs = parseExpression(builder, node->rexpr.rhs, allocaMap, functionMap);
+		switch (node->rexpr.op)
+		{
+		case lt:
+			return builder.CreateICmpSLT(lhs, rhs, "");
+		case gt:
+			return builder.CreateICmpSGT(lhs, rhs, "");
+			break;
+		case le:
+			return builder.CreateICmpSLE(lhs, rhs, "");
+		case ge:
+			return builder.CreateICmpSGE(lhs, rhs, "");
+		case eq:
+			return builder.CreateICmpEQ(lhs, rhs, "");
+		case neq:
+			return builder.CreateICmpNE(lhs, rhs, "");
+		default:
+			break;
+		}
+	}
 	default:
 		break;
 	}
@@ -128,13 +170,16 @@ void generateIR(astNode *node, string output)
 		retType = builder.getVoidTy();
 	}
 	std::vector<llvm::Type *> argTypes;
-	if (func.param != nullptr)
+	if (func.params != nullptr)
 	{
-		argTypes.push_back(builder.getInt32Ty());
+		for (astNode *p : *func.params)
+		{
+			argTypes.push_back(builder.getInt32Ty());
+		}
 	}
 	llvm::FunctionType *funcType = llvm::FunctionType::get(retType, argTypes, false);
 	llvm::Function *llvmFunc = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, func.name, module);
-	functionMap[func.name] = llvmFunc;
+	functionMap[string{func.name}] = llvmFunc;
 	vector<astNode *> nodeStack{func.body, prog.ext1, prog.ext2};
 	vector<vector<astNode *>> blockStack;
 	map<llvm::BasicBlock *, tuple<llvm::BasicBlock *, llvm::BasicBlock *>> blockSuccessionMap;
@@ -192,19 +237,23 @@ void generateIR(astNode *node, string output)
 						returnP = builder.CreateAlloca(builder.getInt32Ty(), 0, nullptr, "");
 						llvm::BasicBlock &entryBlock = llvmFunc->getEntryBlock();
 						top = &*llvmFunc->getEntryBlock().getFirstInsertionPt();
-						moveTop(top, ((llvm::Instruction *) returnP));
+						moveTop(top, ((llvm::Instruction *)returnP));
 					}
-					if (func.param != nullptr)
+					if (func.params != nullptr)
 					{
-						astVar var = func.param->var;
-						if (top == nullptr) {
-							top = &*llvmFunc->getEntryBlock().getFirstInsertionPt();
+						llvm::Function::arg_iterator funcParamValue = llvmFunc->arg_begin();
+						for (astNode *param : *func.params)
+						{
+							astVar var = param->var;
+							if (top == nullptr)
+							{
+								top = &*llvmFunc->getEntryBlock().getFirstInsertionPt();
+							}
+							llvm::Value *allocaP = builder.CreateAlloca(builder.getInt32Ty(), 0, nullptr, string{var.name});
+							moveTop(top, ((llvm::Instruction *)allocaP));
+							builder.CreateStore(&*funcParamValue++, allocaP, false);
+							allocaMap[string{var.name}] = allocaP;
 						}
-						llvm::Value *allocaP = builder.CreateAlloca(builder.getInt32Ty(), 0, nullptr, string{var.name});
-						moveTop(top, ((llvm::Instruction *) allocaP));
-						llvm::Value *funcParamValue = llvmFunc->arg_begin();
-						builder.CreateStore(funcParamValue, allocaP, false);
-						allocaMap[string{var.name}] = allocaP;
 					}
 				}
 				else if (llvmFunc->size() > 1)
@@ -227,45 +276,39 @@ void generateIR(astNode *node, string output)
 				break;
 			}
 			case ast_while:
+			{
+				// loop condition code
+				astWhile whileNode = node->stmt.whilen;
+				// loop body basic block and successor
+				llvm::BasicBlock *cmpBB = llvm::BasicBlock::Create(context, "", llvmFunc);
+				llvm::BasicBlock *loopBlock = llvm::BasicBlock::Create(context, "", llvmFunc);
+				llvm::BasicBlock *finalBlock = llvm::BasicBlock::Create(context, "", llvmFunc);
+				llvm::BasicBlock *prevBlock = builder.GetInsertBlock();
+				builder.CreateBr(cmpBB);
+				builder.SetInsertPoint(cmpBB);
+				llvm::Value *cond = parseExpression(builder, whileNode.cond, allocaMap, functionMap);
+				blockSuccessionMap[loopBlock] = make_tuple(finalBlock, cmpBB);
+				builder.CreateCondBr(cond, loopBlock, finalBlock);
+				if (blockSuccessionMap.find(prevBlock) != blockSuccessionMap.end())
+				{
+					blockSuccessionMap[finalBlock] = blockSuccessionMap[prevBlock];
+					blockSuccessionMap.erase(prevBlock);
+				}
+				builder.SetInsertPoint(loopBlock);
+				nodeStack.push_back(whileNode.body);
 				break;
+			}
 			case ast_if:
 			{
 				astIf ifNode = node->stmt.ifn;
-				astRExpr rexpr = ifNode.cond->rexpr;
-				llvm::Value *lhs = parseExpression(builder, rexpr.lhs, allocaMap, functionMap);
-				llvm::Value *rhs = parseExpression(builder, rexpr.rhs, allocaMap, functionMap);
-				;
-				llvm::Value *cond;
-				switch (rexpr.op)
-				{
-				case lt:
-					cond = builder.CreateICmpSLT(lhs, rhs, "");
-					break;
-				case gt:
-					cond = builder.CreateICmpSGT(lhs, rhs, "");
-					break;
-				case le:
-					cond = builder.CreateICmpSLE(lhs, rhs, "");
-					break;
-				case ge:
-					cond = builder.CreateICmpSGE(lhs, rhs, "");
-					break;
-				case eq:
-					cond = builder.CreateICmpEQ(lhs, rhs, "");
-					break;
-				case neq:
-					cond = builder.CreateICmpNE(lhs, rhs, "");
-					break;
-				default:
-					break;
-				}
-
+				llvm::Value *cond = parseExpression(builder, ifNode.cond, allocaMap, functionMap);
+				llvm::BasicBlock *finalBlock = nullptr;
 				llvm::BasicBlock *ifBlock = llvm::BasicBlock::Create(context, "", llvmFunc);
 				llvm::BasicBlock *elseBlock = nullptr;
 				if (ifNode.else_body)
 				{
 					elseBlock = llvm::BasicBlock::Create(context, "", llvmFunc);
-					llvm::BasicBlock *finalBlock = llvm::BasicBlock::Create(context, "", llvmFunc);
+					finalBlock = llvm::BasicBlock::Create(context, "", llvmFunc);
 					blockSuccessionMap[ifBlock] = make_tuple(elseBlock, finalBlock);
 					blockSuccessionMap[elseBlock] = make_tuple(finalBlock, finalBlock);
 					builder.CreateCondBr(cond, ifBlock, elseBlock);
@@ -273,9 +316,14 @@ void generateIR(astNode *node, string output)
 				}
 				else
 				{
-					llvm::BasicBlock *finalBlock = llvm::BasicBlock::Create(context, "", llvmFunc);
+					finalBlock = llvm::BasicBlock::Create(context, "", llvmFunc);
 					blockSuccessionMap[ifBlock] = make_tuple(finalBlock, finalBlock);
 					builder.CreateCondBr(cond, ifBlock, finalBlock);
+				}
+				if (blockSuccessionMap.find(builder.GetInsertBlock()) != blockSuccessionMap.end())
+				{
+					blockSuccessionMap[finalBlock] = blockSuccessionMap[builder.GetInsertBlock()];
+					blockSuccessionMap.erase(builder.GetInsertBlock());
 				}
 				nodeStack.push_back(ifNode.if_body);
 				builder.SetInsertPoint(ifBlock);
@@ -317,7 +365,7 @@ void generateIR(astNode *node, string output)
 				{
 					top = &*llvmFunc->getEntryBlock().getFirstInsertionPt();
 				}
-				moveTop(top, ((llvm::Instruction *) allocaP));
+				moveTop(top, ((llvm::Instruction *)allocaP));
 				allocaMap[varName] = allocaP;
 				break;
 			}
