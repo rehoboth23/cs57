@@ -105,7 +105,15 @@ func_arg: type VAR {
 }
 
 // a loop (while) block
-loop: WHILE '(' condition ')' code_block {$$ = createWhile($3, $5);}
+loop: WHILE '(' expr ')' code_block {
+	astNode *cond = $3;
+	if(cond->type != ast_rexpr) {
+		astNode *tcnst = createCnst(0);
+		tcnst->cnst.type = int_ty;
+		cond = createRExpr(cond, tcnst, neq);
+	}
+	$$ = createWhile(cond, $5);
+}
 
 // if else block with proper precedence
 if_else: if_statment %prec IFX {
@@ -117,13 +125,30 @@ if_else: if_statment %prec IFX {
 				}
 
 // if statement
-if_statment: IF '(' condition ')' statement {
-	$$ = createIf($3, $5, nullptr);
+if_statment: IF '(' expr ')' statement {
+	astNode *cond = $3;
+	if(cond->type != ast_rexpr) {
+		astNode *tcnst = createCnst(0);
+		tcnst->cnst.type = int_ty;
+		cond = createRExpr(cond, tcnst, neq);
+	}
+	if($5->stmt.type != ast_block) {
+		vector<astNode *> *vec = new vector<astNode *>();
+		vec->push_back($5);
+		$$ = createIf(cond, createBlock(vec), nullptr);
+	} else {
+		$$ = createIf(cond, $5, nullptr);
+	}
 }
 
 // else statement
 else_statement: ELSE statement {
 	$$ = $2;
+	if($$->stmt.type != ast_block) {
+		vector<astNode *> *vec = new vector<astNode *>();
+		vec->push_back($2);
+		$$ = createBlock(vec);
+	}
 }
 
 // code block with var declarations at the start

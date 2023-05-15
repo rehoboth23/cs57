@@ -12,7 +12,15 @@ int main()
 	// b = readc();
 	// print(a);
 	int b = read();
-	print(b);
-	print(b > 0);
+	if (b > 0)
+	{
+		while (b)
+		{
+			print(b);
+			b = b - 1;
+		}
+	}
+	else
+		print(b);
 	return 0;
 }

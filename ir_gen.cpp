@@ -163,9 +163,9 @@ llvm::Value *parseExpression(llvm::IRBuilder<> &builder,
 	return nullptr;
 }
 
-void generateIR(astNode *node, string output)
+void generateIR(astNode *iNode, string output)
 {
-	if (node->type != ast_prog)
+	if (iNode->type != ast_prog)
 	{
 		cerr << "Wrong type or astNode. Must begin with an ast_prog" << endl;
 		exit(1);
@@ -175,7 +175,7 @@ void generateIR(astNode *node, string output)
 	map<string, llvm::Function *> functionMap;
 	llvm::IRBuilder<> builder(context);
 	llvm::Instruction *top = nullptr;
-	astProg prog = node->prog;
+	astProg prog = iNode->prog;
 	astFunc func = prog.func->func;
 	llvm::Type *retType = getType(func.type, builder);
 
@@ -203,198 +203,202 @@ void generateIR(astNode *node, string output)
 
 	while (nodeStack.size() || blockStack.size())
 	{
-		astNode *node = nodeStack.back();
-		nodeStack.pop_back();
-		if (node == nullptr)
+
+		if (!nodeStack.empty())
 		{
-			continue;
-		}
-		switch (node->type)
-		{
-		case ast_extern:
-		{
-			string name = string{node->ext.name};
-			std::vector<llvm::Type *> extArgTypes;
-			for (var_type t : *node->ext.args)
+			astNode *node = nodeStack.back();
+			nodeStack.pop_back();
+			if (node == nullptr)
 			{
-				extArgTypes.push_back(getType(t, builder));
+				continue;
 			}
-			llvm::Type *extRetType = getType(node->ext.type, builder);
-			llvm::FunctionType *extType = llvm::FunctionType::get(extRetType, extArgTypes, false);
-			llvm::Function *extFunc = llvm::Function::Create(extType, llvm::Function::ExternalLinkage, name, module);
-			functionMap[name] = extFunc;
-			break;
-		}
-		case ast_stmt:
-			switch (node->stmt.type)
+			switch (node->type)
 			{
-			case ast_call:
-				parseExpression(builder, node, allocaMap, functionMap);
+			case ast_extern:
+			{
+				string name = string{node->ext.name};
+				std::vector<llvm::Type *> extArgTypes;
+				for (var_type t : *node->ext.args)
+				{
+					extArgTypes.push_back(getType(t, builder));
+				}
+				llvm::Type *extRetType = getType(node->ext.type, builder);
+				llvm::FunctionType *extType = llvm::FunctionType::get(extRetType, extArgTypes, false);
+				llvm::Function *extFunc = llvm::Function::Create(extType, llvm::Function::ExternalLinkage, name, module);
+				functionMap[name] = extFunc;
 				break;
-			case ast_block:
-			{
-				if (!builder.GetInsertBlock())
+			}
+			case ast_stmt:
+				switch (node->stmt.type)
 				{
-					llvm::BasicBlock *block = llvm::BasicBlock::Create(context, "", llvmFunc);
-					builder.SetInsertPoint(block);
-				}
-				else if (blockSuccessionMap.find(builder.GetInsertBlock()) == blockSuccessionMap.end())
+				case ast_call:
+					parseExpression(builder, node, allocaMap, functionMap);
+					break;
+				case ast_block:
 				{
-					llvm::BasicBlock *block = llvm::BasicBlock::Create(context, "", llvmFunc);
-					builder.CreateBr(block);
-					builder.SetInsertPoint(block);
-				}
-				if (llvmFunc->size() == 1)
-				{
-					if (func.type != void_ty)
+					if (!builder.GetInsertBlock())
 					{
-						returnP = builder.CreateAlloca(getType(func.type, builder), 0, nullptr, "");
+						llvm::BasicBlock *block = llvm::BasicBlock::Create(context, "", llvmFunc);
+						builder.SetInsertPoint(block);
 					}
-					if (returnP != nullptr)
+					else if (blockSuccessionMap.find(builder.GetInsertBlock()) == blockSuccessionMap.end())
 					{
-						llvm::BasicBlock &entryBlock = llvmFunc->getEntryBlock();
-						top = &*llvmFunc->getEntryBlock().getFirstInsertionPt();
-						moveTop(top, ((llvm::Instruction *)returnP));
+						llvm::BasicBlock *block = llvm::BasicBlock::Create(context, "", llvmFunc);
+						builder.CreateBr(block);
+						builder.SetInsertPoint(block);
 					}
-					if (func.params != nullptr)
+					if (llvmFunc->size() == 1)
 					{
-						llvm::Function::arg_iterator funcParamValue = llvmFunc->arg_begin();
-						for (astNode *param : *func.params)
+						if (func.type != void_ty)
 						{
-							astVar var = param->var;
-							if (top == nullptr)
+							returnP = builder.CreateAlloca(getType(func.type, builder), 0, nullptr, "");
+						}
+						if (returnP != nullptr)
+						{
+							llvm::BasicBlock &entryBlock = llvmFunc->getEntryBlock();
+							top = &*llvmFunc->getEntryBlock().getFirstInsertionPt();
+							moveTop(top, ((llvm::Instruction *)returnP));
+						}
+						if (func.params != nullptr)
+						{
+							llvm::Function::arg_iterator funcParamValue = llvmFunc->arg_begin();
+							for (astNode *param : *func.params)
 							{
-								top = &*llvmFunc->getEntryBlock().getFirstInsertionPt();
+								astVar var = param->var;
+								if (top == nullptr)
+								{
+									top = &*llvmFunc->getEntryBlock().getFirstInsertionPt();
+								}
+								llvm::Value *allocaP = builder.CreateAlloca(funcParamValue->getType(), 0, nullptr, string{var.name});
+								moveTop(top, ((llvm::Instruction *)allocaP));
+								builder.CreateStore(&*funcParamValue++, allocaP, false);
+								allocaMap[string{var.name}] = allocaP;
 							}
-							llvm::Value *allocaP = builder.CreateAlloca(funcParamValue->getType(), 0, nullptr, string{var.name});
-							moveTop(top, ((llvm::Instruction *)allocaP));
-							builder.CreateStore(&*funcParamValue++, allocaP, false);
-							allocaMap[string{var.name}] = allocaP;
 						}
 					}
-				}
-				else if (llvmFunc->size() > 1)
-				{
-					blockStack.push_back(nodeStack);
-					nodeStack = vector<astNode *>{};
-				}
-				vector<astNode *> stmts = *(node->stmt.block.stmt_list);
-				for (auto it = stmts.rbegin(); it != stmts.rend(); it++)
-				{
-					nodeStack.push_back(*it);
-				}
-				break;
-			}
-			case ast_asgn:
-			{
-
-				llvm::Value *lhs = parseExpression(builder, node->stmt.asgn.lhs, allocaMap, functionMap, false);
-				llvm::Value *rhs = parseExpression(builder, node->stmt.asgn.rhs, allocaMap, functionMap);
-				builder.CreateStore(rhs, lhs, false);
-				break;
-			}
-			case ast_while:
-			{
-				// loop condition code
-				astWhile whileNode = node->stmt.whilen;
-				// loop body basic block and successor
-				llvm::BasicBlock *cmpBB = llvm::BasicBlock::Create(context, "", llvmFunc);
-				llvm::BasicBlock *loopBlock = llvm::BasicBlock::Create(context, "", llvmFunc);
-				llvm::BasicBlock *finalBlock = llvm::BasicBlock::Create(context, "", llvmFunc);
-				llvm::BasicBlock *prevBlock = builder.GetInsertBlock();
-				builder.CreateBr(cmpBB);
-				builder.SetInsertPoint(cmpBB);
-				llvm::Value *cond = parseExpression(builder, whileNode.cond, allocaMap, functionMap);
-				blockSuccessionMap[loopBlock] = make_tuple(finalBlock, cmpBB);
-				builder.CreateCondBr(cond, loopBlock, finalBlock);
-				if (blockSuccessionMap.find(prevBlock) != blockSuccessionMap.end())
-				{
-					blockSuccessionMap[finalBlock] = blockSuccessionMap[prevBlock];
-					blockSuccessionMap.erase(prevBlock);
-				}
-				builder.SetInsertPoint(loopBlock);
-				nodeStack.push_back(whileNode.body);
-				break;
-			}
-			case ast_if:
-			{
-				astIf ifNode = node->stmt.ifn;
-				llvm::Value *cond = parseExpression(builder, ifNode.cond, allocaMap, functionMap);
-				llvm::BasicBlock *finalBlock = nullptr;
-				llvm::BasicBlock *ifBlock = llvm::BasicBlock::Create(context, "", llvmFunc);
-				llvm::BasicBlock *elseBlock = nullptr;
-				if (ifNode.else_body)
-				{
-					elseBlock = llvm::BasicBlock::Create(context, "", llvmFunc);
-					finalBlock = llvm::BasicBlock::Create(context, "", llvmFunc);
-					blockSuccessionMap[ifBlock] = make_tuple(elseBlock, finalBlock);
-					blockSuccessionMap[elseBlock] = make_tuple(finalBlock, finalBlock);
-					builder.CreateCondBr(cond, ifBlock, elseBlock);
-					nodeStack.push_back(ifNode.else_body);
-				}
-				else
-				{
-					finalBlock = llvm::BasicBlock::Create(context, "", llvmFunc);
-					blockSuccessionMap[ifBlock] = make_tuple(finalBlock, finalBlock);
-					builder.CreateCondBr(cond, ifBlock, finalBlock);
-				}
-				if (blockSuccessionMap.find(builder.GetInsertBlock()) != blockSuccessionMap.end())
-				{
-					blockSuccessionMap[finalBlock] = blockSuccessionMap[builder.GetInsertBlock()];
-					blockSuccessionMap.erase(builder.GetInsertBlock());
-				}
-				nodeStack.push_back(ifNode.if_body);
-				builder.SetInsertPoint(ifBlock);
-			}
-			break;
-			case ast_ret:
-			{
-				llvm::Value *retexpr = parseExpression(builder, node->stmt.ret.expr, allocaMap, functionMap);
-				if (blockSuccessionMap.find(builder.GetInsertBlock()) != blockSuccessionMap.end())
-				{
-					if (!retBlock)
+					else if (llvmFunc->size() > 1)
 					{
-						retBlock = llvm::BasicBlock::Create(context, "", llvmFunc);
+						blockStack.push_back(nodeStack);
+						nodeStack = vector<astNode *>{};
 					}
-					builder.CreateStore(retexpr, returnP, false);
-					tuple<llvm::BasicBlock *, llvm::BasicBlock *> nextBr = blockSuccessionMap[builder.GetInsertBlock()];
-					blockSuccessionMap[builder.GetInsertBlock()] = make_tuple(get<0>(nextBr), retBlock);
-				}
-				else
-				{
-					if (!retBlock)
+					vector<astNode *> stmts = *(node->stmt.block.stmt_list);
+					for (auto it = stmts.rbegin(); it != stmts.rend(); it++)
 					{
-						builder.CreateRet(retexpr);
-						// ((llvm::Instruction *)returnP)->eraseFromParent();
+						nodeStack.push_back(*it);
+					}
+					break;
+				}
+				case ast_asgn:
+				{
+
+					llvm::Value *lhs = parseExpression(builder, node->stmt.asgn.lhs, allocaMap, functionMap, false);
+					llvm::Value *rhs = parseExpression(builder, node->stmt.asgn.rhs, allocaMap, functionMap);
+					builder.CreateStore(rhs, lhs, false);
+					break;
+				}
+				case ast_while:
+				{
+					// loop condition code
+					astWhile whileNode = node->stmt.whilen;
+					// loop body basic block and successor
+					llvm::BasicBlock *cmpBB = llvm::BasicBlock::Create(context, "", llvmFunc);
+					llvm::BasicBlock *loopBlock = llvm::BasicBlock::Create(context, "", llvmFunc);
+					llvm::BasicBlock *finalBlock = llvm::BasicBlock::Create(context, "", llvmFunc);
+					llvm::BasicBlock *prevBlock = builder.GetInsertBlock();
+					builder.CreateBr(cmpBB);
+					builder.SetInsertPoint(cmpBB);
+					llvm::Value *cond = parseExpression(builder, whileNode.cond, allocaMap, functionMap);
+					blockSuccessionMap[loopBlock] = make_tuple(finalBlock, cmpBB);
+					builder.CreateCondBr(cond, loopBlock, finalBlock);
+					if (blockSuccessionMap.find(prevBlock) != blockSuccessionMap.end())
+					{
+						blockSuccessionMap[finalBlock] = blockSuccessionMap[prevBlock];
+						blockSuccessionMap.erase(prevBlock);
+					}
+					builder.SetInsertPoint(loopBlock);
+					nodeStack.push_back(whileNode.body);
+					break;
+				}
+				case ast_if:
+				{
+					astIf ifNode = node->stmt.ifn;
+					llvm::Value *cond = parseExpression(builder, ifNode.cond, allocaMap, functionMap);
+					llvm::BasicBlock *finalBlock = nullptr;
+					llvm::BasicBlock *ifBlock = llvm::BasicBlock::Create(context, "", llvmFunc);
+					llvm::BasicBlock *elseBlock = nullptr;
+					if (ifNode.else_body)
+					{
+						elseBlock = llvm::BasicBlock::Create(context, "", llvmFunc);
+						finalBlock = llvm::BasicBlock::Create(context, "", llvmFunc);
+						blockSuccessionMap[ifBlock] = make_tuple(elseBlock, finalBlock);
+						blockSuccessionMap[elseBlock] = make_tuple(finalBlock, finalBlock);
+						builder.CreateCondBr(cond, ifBlock, elseBlock);
+						nodeStack.push_back(ifNode.else_body);
 					}
 					else
 					{
-						builder.CreateStore(retexpr, returnP, false);
-						blockSuccessionMap[builder.GetInsertBlock()] = make_tuple(retBlock, retBlock);
+						finalBlock = llvm::BasicBlock::Create(context, "", llvmFunc);
+						blockSuccessionMap[ifBlock] = make_tuple(finalBlock, finalBlock);
+						builder.CreateCondBr(cond, ifBlock, finalBlock);
 					}
+					if (blockSuccessionMap.find(builder.GetInsertBlock()) != blockSuccessionMap.end())
+					{
+						blockSuccessionMap[finalBlock] = blockSuccessionMap[builder.GetInsertBlock()];
+						blockSuccessionMap.erase(builder.GetInsertBlock());
+					}
+					nodeStack.push_back(ifNode.if_body);
+					builder.SetInsertPoint(ifBlock);
 				}
 				break;
-			}
-			case ast_decl:
-			{
-				string varName{node->stmt.decl.name};
-				llvm::Value *allocaP = builder.CreateAlloca(getType(node->stmt.decl.type, builder), nullptr, varName);
-				if (top == nullptr)
+				case ast_ret:
 				{
-					top = &*llvmFunc->getEntryBlock().getFirstInsertionPt();
+					llvm::Value *retexpr = parseExpression(builder, node->stmt.ret.expr, allocaMap, functionMap);
+					if (blockSuccessionMap.find(builder.GetInsertBlock()) != blockSuccessionMap.end())
+					{
+						if (!retBlock)
+						{
+							retBlock = llvm::BasicBlock::Create(context, "", llvmFunc);
+						}
+						builder.CreateStore(retexpr, returnP, false);
+						tuple<llvm::BasicBlock *, llvm::BasicBlock *> nextBr = blockSuccessionMap[builder.GetInsertBlock()];
+						blockSuccessionMap[builder.GetInsertBlock()] = make_tuple(get<0>(nextBr), retBlock);
+					}
+					else
+					{
+						if (!retBlock)
+						{
+							builder.CreateRet(retexpr);
+							// ((llvm::Instruction *)returnP)->eraseFromParent();
+						}
+						else
+						{
+							builder.CreateStore(retexpr, returnP, false);
+							blockSuccessionMap[builder.GetInsertBlock()] = make_tuple(retBlock, retBlock);
+						}
+					}
+					break;
 				}
-				moveTop(top, ((llvm::Instruction *)allocaP));
-				allocaMap[varName] = allocaP;
+				case ast_decl:
+				{
+					string varName{node->stmt.decl.name};
+					llvm::Value *allocaP = builder.CreateAlloca(getType(node->stmt.decl.type, builder), nullptr, varName);
+					if (top == nullptr)
+					{
+						top = &*llvmFunc->getEntryBlock().getFirstInsertionPt();
+					}
+					moveTop(top, ((llvm::Instruction *)allocaP));
+					allocaMap[varName] = allocaP;
+					break;
+				}
+				default:
+					break;
+				}
 				break;
-			}
 			default:
 				break;
 			}
-			break;
-		default:
-			break;
 		}
-		if (nodeStack.empty() && !blockStack.empty())
+		else
 		{
 			nodeStack = blockStack.back();
 			blockStack.pop_back();
