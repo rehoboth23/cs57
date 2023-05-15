@@ -164,9 +164,10 @@ statement: assignment {
 					}
 					| RETURN '(' expr ')' ';' {
 						$$ = createRet($3);
-					} | RETURN expr ';' {
+					} 
+					| RETURN expr ';' {
 						$$ = createRet($2);
-					}
+					} 
 					| variable_declaration {
 						$$ = $1;
 					} | variable_assignment {
@@ -212,16 +213,17 @@ function_call: VAR '(' exprs ')' {
 							}
 
 exprs: exprs COMMA expr {
-				$$ = $1;
-				$$->push_back($3);
-			}
-			| expr {
-				$$ = new vector<astNode*>();
-				$$->push_back($1);
-			}
+			$$ = $1;
+			$$->push_back($3);
+		} 
+		| expr {
+			$$ = new vector<astNode*>();
+			$$->push_back($1);
+		} 
 
 expr: arithmetic {$$ = $1;}
 			| parameter  {$$ = $1;}
+			| condition  {$$ = $1;}
 			| function_call { $$ = $1;}
 
 // arithmetic operations

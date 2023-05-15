@@ -141,14 +141,14 @@ llvm::Value *parseExpression(llvm::IRBuilder<> &builder,
 		switch (node->rexpr.op)
 		{
 		case lt:
-			return builder.CreateICmpULT(lhs, rhs, "");
+			return builder.CreateICmpSLT(lhs, rhs, "");
 		case gt:
-			return builder.CreateICmpUGT(lhs, rhs, "");
+			return builder.CreateICmpSGT(lhs, rhs, "");
 			break;
 		case le:
-			return builder.CreateICmpULE(lhs, rhs, "");
+			return builder.CreateICmpSLE(lhs, rhs, "");
 		case ge:
-			return builder.CreateICmpUGE(lhs, rhs, "");
+			return builder.CreateICmpSGE(lhs, rhs, "");
 		case eq:
 			return builder.CreateICmpEQ(lhs, rhs, "");
 		case neq:
@@ -433,7 +433,7 @@ void generateIR(astNode *node, string output)
 	}
 
 	// optimize module
-	// optimizeModule(*module);
+	optimizeModule(*module);
 
 	// write optimized ll file
 	ofstream ofs(output);
