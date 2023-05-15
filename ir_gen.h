@@ -13,6 +13,7 @@
 #define IR_GEN_H
 
 #include <string>
+#include <iostream>
 #include "ast.h"
 
 using namespace std;

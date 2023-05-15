@@ -20,9 +20,29 @@ void moveTop(llvm::Instruction *&top, llvm::Instruction *toMove)
 	top = toMove;
 }
 
+llvm::Type *getType(var_type type, llvm::IRBuilder<> &builder)
+{
+	switch (type)
+	{
+	case int_ty:
+		return builder.getInt32Ty();
+		break;
+	case char_ty:
+		return builder.getInt8Ty();
+		break;
+	case ptr_ty:
+		return builder.getInt8PtrTy();
+		break;
+	default:
+		return builder.getVoidTy();
+		break;
+	}
+}
+
 llvm::Value *parseExpression(llvm::IRBuilder<> &builder,
-														 astNode *node, map<string, llvm::Value *> allocaMap,
-														 map<string, llvm::Function *>& functionMap)
+														 astNode *node, map<string, llvm::Value *> &allocaMap,
+														 map<string, llvm::Function *> &functionMap,
+														 bool load = true)
 {
 	assert(node);
 	switch (node->type)
@@ -43,22 +63,6 @@ llvm::Value *parseExpression(llvm::IRBuilder<> &builder,
 				{
 					args.push_back(parseExpression(builder, param, allocaMap, functionMap));
 				}
-			}
-			if (callFunc == nullptr)
-			{
-				std::vector<llvm::Type *> argTypes;
-				if (call.params)
-				{
-					for (astNode *p : *call.params)
-					{
-						argTypes.push_back(builder.getInt32Ty());
-					}
-				}
-				llvm::Type *retType = builder.getInt32Ty();
-				llvm::FunctionType *extType = llvm::FunctionType::get(retType, argTypes, false);
-				llvm::Module *module = builder.GetInsertBlock()->getParent()->getParent();
-				callFunc = llvm::Function::Create(extType, llvm::Function::ExternalLinkage, name, module);
-				functionMap[name] = callFunc;
 			}
 			return builder.CreateCall(callFunc, args);
 		}
@@ -108,12 +112,27 @@ llvm::Value *parseExpression(llvm::IRBuilder<> &builder,
 	}
 	case ast_cnst:
 	{
-		return builder.getInt32(node->cnst.value);
+		if (node->cnst.type == char_ty)
+		{
+			return builder.getInt8(node->cnst.value);
+		}
+		else
+		{
+			return builder.getInt32(node->cnst.value);
+		}
 	}
 	case ast_var:
 	{
+		if (node->var.declared)
+		{
+			allocaMap[string{node->var.name}] = builder.CreateAlloca(getType(node->var.type, builder), 0, nullptr, "");
+		}
+		if (!load)
+		{
+			return allocaMap[string{node->var.name}];
+		}
 		llvm::Value *allocaP = allocaMap[string{node->var.name}];
-		return builder.CreateLoad(builder.getInt32Ty(), allocaP, false);
+		return builder.CreateLoad(getType(node->var.type, builder), allocaP, false);
 	}
 	case ast_rexpr:
 	{
@@ -122,14 +141,14 @@ llvm::Value *parseExpression(llvm::IRBuilder<> &builder,
 		switch (node->rexpr.op)
 		{
 		case lt:
-			return builder.CreateICmpSLT(lhs, rhs, "");
+			return builder.CreateICmpULT(lhs, rhs, "");
 		case gt:
-			return builder.CreateICmpSGT(lhs, rhs, "");
+			return builder.CreateICmpUGT(lhs, rhs, "");
 			break;
 		case le:
-			return builder.CreateICmpSLE(lhs, rhs, "");
+			return builder.CreateICmpULE(lhs, rhs, "");
 		case ge:
-			return builder.CreateICmpSGE(lhs, rhs, "");
+			return builder.CreateICmpUGE(lhs, rhs, "");
 		case eq:
 			return builder.CreateICmpEQ(lhs, rhs, "");
 		case neq:
@@ -155,32 +174,27 @@ void generateIR(astNode *node, string output)
 	llvm::Module *module = new llvm::Module("Prog", context);
 	map<string, llvm::Function *> functionMap;
 	llvm::IRBuilder<> builder(context);
-	llvm::Type *retType = nullptr;
 	llvm::Instruction *top = nullptr;
-
 	astProg prog = node->prog;
 	astFunc func = prog.func->func;
+	llvm::Type *retType = getType(func.type, builder);
 
-	if (string{func.type} == string{"int"})
-	{
-		retType = builder.getInt32Ty();
-	}
-	else
-	{
-		retType = builder.getVoidTy();
-	}
 	std::vector<llvm::Type *> argTypes;
 	if (func.params != nullptr)
 	{
 		for (astNode *p : *func.params)
 		{
-			argTypes.push_back(builder.getInt32Ty());
+			argTypes.push_back(getType(p->var.type, builder));
 		}
 	}
 	llvm::FunctionType *funcType = llvm::FunctionType::get(retType, argTypes, false);
 	llvm::Function *llvmFunc = llvm::Function::Create(funcType, llvm::Function::ExternalLinkage, func.name, module);
 	functionMap[string{func.name}] = llvmFunc;
-	vector<astNode *> nodeStack{func.body, prog.ext1, prog.ext2};
+	vector<astNode *> nodeStack{func.body};
+	for (astNode *ext : *prog.exts)
+	{
+		nodeStack.push_back(ext);
+	}
 	vector<vector<astNode *>> blockStack;
 	map<llvm::BasicBlock *, tuple<llvm::BasicBlock *, llvm::BasicBlock *>> blockSuccessionMap;
 	map<string, llvm::Value *> allocaMap;
@@ -201,11 +215,11 @@ void generateIR(astNode *node, string output)
 		{
 			string name = string{node->ext.name};
 			std::vector<llvm::Type *> extArgTypes;
-			if (name == string{"print"})
+			for (var_type t : *node->ext.args)
 			{
-				extArgTypes.push_back(builder.getInt32Ty());
+				extArgTypes.push_back(getType(t, builder));
 			}
-			llvm::Type *extRetType = name == string{"read"} ? builder.getInt32Ty() : builder.getVoidTy();
+			llvm::Type *extRetType = getType(node->ext.type, builder);
 			llvm::FunctionType *extType = llvm::FunctionType::get(extRetType, extArgTypes, false);
 			llvm::Function *extFunc = llvm::Function::Create(extType, llvm::Function::ExternalLinkage, name, module);
 			functionMap[name] = extFunc;
@@ -232,9 +246,12 @@ void generateIR(astNode *node, string output)
 				}
 				if (llvmFunc->size() == 1)
 				{
-					if (string{func.type} == string{"int"})
+					if (func.type != void_ty)
 					{
-						returnP = builder.CreateAlloca(builder.getInt32Ty(), 0, nullptr, "");
+						returnP = builder.CreateAlloca(getType(func.type, builder), 0, nullptr, "");
+					}
+					if (returnP != nullptr)
+					{
 						llvm::BasicBlock &entryBlock = llvmFunc->getEntryBlock();
 						top = &*llvmFunc->getEntryBlock().getFirstInsertionPt();
 						moveTop(top, ((llvm::Instruction *)returnP));
@@ -249,7 +266,7 @@ void generateIR(astNode *node, string output)
 							{
 								top = &*llvmFunc->getEntryBlock().getFirstInsertionPt();
 							}
-							llvm::Value *allocaP = builder.CreateAlloca(builder.getInt32Ty(), 0, nullptr, string{var.name});
+							llvm::Value *allocaP = builder.CreateAlloca(funcParamValue->getType(), 0, nullptr, string{var.name});
 							moveTop(top, ((llvm::Instruction *)allocaP));
 							builder.CreateStore(&*funcParamValue++, allocaP, false);
 							allocaMap[string{var.name}] = allocaP;
@@ -270,7 +287,8 @@ void generateIR(astNode *node, string output)
 			}
 			case ast_asgn:
 			{
-				llvm::Value *lhs = allocaMap[string{node->stmt.asgn.lhs->var.name}];
+
+				llvm::Value *lhs = parseExpression(builder, node->stmt.asgn.lhs, allocaMap, functionMap, false);
 				llvm::Value *rhs = parseExpression(builder, node->stmt.asgn.rhs, allocaMap, functionMap);
 				builder.CreateStore(rhs, lhs, false);
 				break;
@@ -360,7 +378,7 @@ void generateIR(astNode *node, string output)
 			case ast_decl:
 			{
 				string varName{node->stmt.decl.name};
-				llvm::Value *allocaP = builder.CreateAlloca(builder.getInt32Ty(), nullptr, varName);
+				llvm::Value *allocaP = builder.CreateAlloca(getType(node->stmt.decl.type, builder), nullptr, varName);
 				if (top == nullptr)
 				{
 					top = &*llvmFunc->getEntryBlock().getFirstInsertionPt();
@@ -393,9 +411,9 @@ void generateIR(astNode *node, string output)
 	{
 		builder.CreateBr(retBlock);
 		builder.SetInsertPoint(retBlock);
-		builder.CreateRet(builder.CreateLoad(builder.getInt32Ty(), returnP, false));
+		builder.CreateRet(builder.CreateLoad(getType(func.type, builder), returnP, false));
 	}
-	else if (string{func.type} == string{"void"})
+	else if (func.type == void_ty)
 	{
 		builder.CreateRetVoid();
 	}
@@ -415,7 +433,7 @@ void generateIR(astNode *node, string output)
 	}
 
 	// optimize module
-	optimizeModule(*module);
+	// optimizeModule(*module);
 
 	// write optimized ll file
 	ofstream ofs(output);

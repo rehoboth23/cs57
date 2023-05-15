@@ -15,20 +15,24 @@ astNode *root;
 
 %union{
 	int ival;
+	var_type var_ty;
 	char *vname;
 	astNode *nptr;
-	vector<astNode *> *vec_ptr;
+	vector<astNode *> *node_vec_ptr;
+	vector<var_type> *type_vec_ptr;
 }
 
-%token NEQ ADD SUB MUL DIV EXTERN RETURN COMMA
+%token NEQ ADD SUB MUL DIV EXTERN RETURN COMMA PTR
 %token IF ELSE WHILE LT GT LTE GTE EQ
-%token <ival> NUM
+%token <ival> NUM CHAR
 %token <vname> VAR TYPE
 
-%type <vec_ptr>  statements exprs func_args
-%type <nptr> program func_arg extern_print extern_read function function_definition if_else loop
-%type <nptr> if_statment else_statement code_block statement variable_declaration assignment function_call
-%type <nptr> expr arithmetic condition parameter operand unary
+%type <type_vec_ptr> argTypes
+%type <node_vec_ptr>  statements exprs func_args externs
+%type <nptr> program func_arg ext function function_definition if_else loop variable_assignment
+%type <nptr> if_statment else_statement code_block statement variable_declaration assignment _assignment
+%type <nptr> function_call expr arithmetic condition parameter operand unary
+%type <var_ty> type
 
 %left MUL DIV
 %left ADD
@@ -40,31 +44,33 @@ astNode *root;
 
 %%
 // final reduction state
-program: extern_print extern_read function {
-	$$ = createProg($1, $2, $3);
-	root = $$;
-} | extern_read extern_print function {
-	$$ = createProg($1, $2, $3);
-	root = $$;
-} | extern_print function {
-	$$ = createProg($1, nullptr, $2);
-	root = $$;
-} | extern_read function {
-	$$ = createProg($1, nullptr, $2);
-	root = $$;
-} | function {
-	$$ = createProg(nullptr, nullptr, $1);
+program: externs function {
+	$$ = createProg($1, $2);
 	root = $$;
 }
 
-extern_print: EXTERN TYPE VAR '(' TYPE ')' ';' {
+externs: externs ext {
+	$$ = $1;
+	$$->push_back($2);
+} | {
+	$$ = new vector<astNode *>();
+}
+
+ext: EXTERN type VAR '(' argTypes ')' ';' {
 	$$ = createExtern($3);
+	$$->ext.args = $5;
+	$$->ext.type = $2;
 	free($3);
 }
 
-extern_read: EXTERN TYPE VAR '(' ')' ';' {
-	$$ = createExtern($3);
-	free($3);
+argTypes: argTypes COMMA type {
+	$$ = $1;
+	$$->push_back($3);
+} | type {
+	$$ = new vector<var_type>();
+	$$->push_back($1);
+} | {
+	$$ = new vector<var_type>();
 }
 
 // entire function
@@ -74,16 +80,13 @@ function: function_definition code_block {
 }
 
 // a function definition
-function_definition: TYPE VAR '(' func_args ')' {
+function_definition: type VAR '(' func_args ')' {
 											$$ = createFunc($2, $1, $4, nullptr);
 											free($2);
-											free($1);
-											// free($5);
 										}
-										| TYPE VAR '(' ')' {
+										| type VAR '(' ')' {
 											$$ = createFunc($2, $1, nullptr, nullptr);
 											free($2);
-											free($1);
 										}
 
 func_args: func_args COMMA func_arg {
@@ -95,8 +98,9 @@ func_args: func_args COMMA func_arg {
 	$$->push_back($1);
 }}
 
-func_arg: TYPE VAR {
+func_arg: type VAR {
 	$$ = createVar($2);
+	$$->var.type = $1;
 	free($2);
 }
 
@@ -165,21 +169,33 @@ statement: assignment {
 					}
 					| variable_declaration {
 						$$ = $1;
+					} | variable_assignment {
+						$$ = $1;
 					}
 
+// declare and assign variable at once
+variable_assignment: type assignment {
+		$$ = $2;
+		$$->stmt.asgn.lhs->var.type = $1;
+		$$->stmt.asgn.lhs->var.declared = true;
+	}
+
 // variable declaration with new line at the end
-variable_declaration: TYPE VAR ';' {
-	$$ = createDecl($2);
+variable_declaration: type VAR ';' {
+	$$ = createDecl($2, $1);
 	free($2);
 }
 
+assignment: _assignment{
+	$$ = $1;
+}
+	| PTR _assignment {
+		$$ = $2;
+		$$->stmt.asgn.lhs->var.type = ptr_ty;
+	}
+
 // assignment to var
-assignment: VAR '=' expr ';' {
-						astNode *var = createVar($1);
-						$$ = createAsgn(var, $3);
-						free($1);
-					}
-					| VAR '=' function_call ';' {
+_assignment: VAR '=' expr ';' {
 						astNode *var = createVar($1);
 						$$ = createAsgn(var, $3);
 						free($1);
@@ -206,6 +222,7 @@ exprs: exprs COMMA expr {
 
 expr: arithmetic {$$ = $1;}
 			| parameter  {$$ = $1;}
+			| function_call { $$ = $1;}
 
 // arithmetic operations
 arithmetic: parameter ADD parameter {$$ = createBExpr($1, $3, add);}
@@ -227,17 +244,37 @@ parameter: operand {$$ = $1;}
 // operand can be number or variable
 operand: NUM {
 	$$ = createCnst($1);
+	$$->cnst.type = int_ty;
 } | VAR {
 		$$ = createVar($1);
 		free($1);
+	} | CHAR {
+		$$ = createCnst($1);
+		$$->cnst.type = char_ty;
+	} | PTR VAR {
+		$$ = createVar($2);
+		$$->var.type = ptr_ty;
+		free($2);
 	}
+
+type: TYPE {
+	string ty_str = string{$1};
+	if (ty_str == string{"int"}) {
+		$$ = int_ty;
+	} else if (ty_str == string{"char"}) {
+		$$ = char_ty;
+	} else {
+		$$ = void_ty;
+	}
+} | PTR TYPE {
+	$$ = ptr_ty;
+}
 
 // unary opwrations
 unary: SUB operand {$$ = createUExpr($2, uminus);}
 %%
 
 int main(int argc, char** argv){
-	
 	// yydebug = 1;
 	if (argc == 3){
 		yyin = fopen(argv[1], "r");
@@ -248,6 +285,7 @@ int main(int argc, char** argv){
 	root = nullptr;
 	yyparse();
 	if (root) {
+		// printNode(root);
 		analyzer_t *analyzer = createAnalyzer();
 		analyze(analyzer, root);
 		deleteAnalyzer(analyzer);

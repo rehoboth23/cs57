@@ -13,11 +13,7 @@ variable 				{letter}{alphanum_us}*
 number					[0-9]+
 empty 					^[ \t]*\n$
 %%
-"//".*\n {
-}
-
-"/*"(.*\n*.*)*"*/" {
-	printf("multiline\n");
+"//".*\n|"/*"(.*\n*.*)*"*/" {
 }
 
 "extern" {
@@ -30,15 +26,7 @@ empty 					^[ \t]*\n$
 	return RETURN;
 }
 
-"int" {
-	// printf("%s", yytext);
-	char *p=(char *)calloc(strlen(yytext)+1,sizeof(char));
-	strncpy(p, yytext, strlen(yytext));
-	yylval.vname = p;
-	return TYPE;
-}
-
-"void" {
+"char"|"int"|"void" {
 	// printf("%s", yytext);
 	char *p=(char *)calloc(strlen(yytext)+1,sizeof(char));
 	strncpy(p, yytext, strlen(yytext));
@@ -139,6 +127,13 @@ empty 					^[ \t]*\n$
 	// printf("%s", yytext);
 	yylval.ival = atoi(yytext);
 	return NUM;
+}
+"'"({letter}|{number})"'" {
+	yylval.ival = yytext[1];
+	return CHAR;
+}
+"*" {
+	return PTR;
 }
 %%
 

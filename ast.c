@@ -14,16 +14,13 @@ char *get_indent_str(int n)
 }
 
 /* create and free functions for ast_prog type astNode */
-astNode *createProg(astNode *ext1, astNode *ext2, astNode *func)
+astNode *createProg(vector<astNode *> *exts, astNode *func)
 {
 	astNode *node;
 	node = (astNode *)calloc(1, sizeof(astNode));
 	node->type = ast_prog;
-
-	node->prog.ext1 = ext1;
-	node->prog.ext2 = ext2;
+	node->prog.exts = exts;
 	node->prog.func = func;
-
 	return (node);
 }
 
@@ -31,18 +28,16 @@ void freeProg(astNode *node)
 {
 	assert(node != NULL && node->type == ast_prog);
 
-	if (node->prog.ext1)
-		freeExtern(node->prog.ext1);
-	if (node->prog.ext2)
-		freeExtern(node->prog.ext2);
+	for (astNode *ext: *node->prog.exts) {
+		freeExtern(ext);
+	}
 	freeFunc(node->prog.func);
-
 	free(node);
 	return;
 }
 
 /*create and free functions for ast_func type astNode */
-astNode *createFunc(const char *name, const char *type, vector<astNode *> *params, astNode *body)
+astNode *createFunc(const char *name, var_type type, vector<astNode *> *params, astNode *body)
 {
 	astNode *node;
 	node = (astNode *)calloc(1, sizeof(astNode));
@@ -51,8 +46,7 @@ astNode *createFunc(const char *name, const char *type, vector<astNode *> *param
 	node->func.name = (char *)calloc(1, sizeof(char) * (strlen(name) + 1));
 	strcpy(node->func.name, name);
 
-	node->func.type = (char *)calloc(1, sizeof(char) * (strlen(type) + 1));
-	strcpy(node->func.type, type);
+	node->func.type = type;
 
 	node->func.params = params;
 	node->func.body = body;
@@ -65,7 +59,6 @@ void freeFunc(astNode *node)
 	assert(node != NULL && node->type == ast_func);
 
 	free(node->func.name);
-	free(node->func.type);
 	if (node->func.params != NULL)
 	{
 		for (astNode *param : *node->func.params)
@@ -117,6 +110,8 @@ astNode *createVar(const char *name)
 
 	node->var.name = (char *)calloc(1, sizeof(char) * (strlen(name) + 1));
 	strcpy(node->var.name, name);
+	node->var.type = void_ty;
+	node->var.declared = false;
 
 	return (node);
 }
@@ -369,13 +364,14 @@ void freeIf(astNode *node)
 }
 
 /* create and free functions of stmt type ast_decl */
-astNode *createDecl(const char *name)
+astNode *createDecl(const char *name, var_type type)
 {
 	astNode *node = (astNode *)calloc(1, sizeof(astNode));
 	node->type = ast_stmt;
 	node->stmt.type = ast_decl;
 
 	node->stmt.decl.name = (char *)calloc(strlen(name) + 1, sizeof(char));
+	node->stmt.decl.type = type;
 	strcpy(node->stmt.decl.name, name);
 
 	return (node);

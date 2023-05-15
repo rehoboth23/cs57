@@ -271,19 +271,27 @@ void constantPropagation(llvm::Function &func, bool &change)
 				bool replace{false};
 
 				for_each(R,
-								[&inst, &constVal, &replace](llvm::Instruction *x)
-								{
-									llvm::ConstantInt *constOp = dyn_cast<llvm::ConstantInt>(x->getOperand(0));
-									if (constOp != nullptr && (constVal == nullptr || inst.getOperand(0) == x->getOperand(1))) {
-										constVal = constOp;
-										replace = true;
-									} else {
-										replace = false;
-									}
-								});
+								 [&inst, &constVal, &replace](llvm::Instruction *x)
+								 {
+									 llvm::ConstantInt *constOp = dyn_cast<llvm::ConstantInt>(x->getOperand(0));
+									 if (constOp != nullptr)
+									 {
+										 if (
+											constVal != nullptr && inst.getOperand(0) == x->getOperand(1) 
+											|| inst.getOperand(0) == x->getOperand(1))
+										 {
+											 constVal = constOp;
+											 replace = true;
+										 }
+									 }
+									 else
+									 {
+										 replace = false;
+									 }
+								 });
 				if (constVal != nullptr && replace)
 				{
-					inst.replaceAllUsesWith((llvm::Value *) constVal);
+					inst.replaceAllUsesWith((llvm::Value *)constVal);
 					toErase.insert(&inst);
 				}
 			}

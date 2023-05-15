@@ -1,6 +1,7 @@
 #include <iostream>
 #include <vector>
 #include <set>
+#include <map>
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
@@ -11,18 +12,10 @@ using namespace std;
 
 typedef struct analyzer analyzer_t;
 
-struct comp
-{
-  bool operator()(const char *a, const char *b) const
-  {
-    return strncmp(a, b, strlen(b)) < 0;
-  }
-};
-
 struct analyzer
 {
-  vector<set<char *, comp> *> *tables;
-  set<char *, comp> *funcs;
+  vector<map<string, var_type> *> *tables;
+  map<string, var_type> *funcs;
 };
 
 /**
@@ -33,8 +26,8 @@ struct analyzer
 analyzer_t *createAnalyzer()
 {
   analyzer_t *analyzer = (analyzer_t *)calloc(1, sizeof(analyzer_t));
-  analyzer->tables = new vector<set<char *, comp> *>();
-  analyzer->funcs = new set<char *, comp>();
+  analyzer->tables = new vector<map<string, var_type> *>();
+  analyzer->funcs = new map<string, var_type>();
   return analyzer;
 }
 
@@ -44,15 +37,14 @@ analyzer_t *createAnalyzer()
  * @param analyzer analyzer
  * @param variable variable to add to most recent symbol table
  */
-void addToAnalyzer(analyzer_t *analyzer, char *variable)
+void addToAnalyzer(analyzer_t *analyzer, char *variable, var_type type)
 {
   assert(variable != NULL);
   assert(analyzer != NULL);
 
-  char *var = (char *)calloc(strlen(variable) + 1, sizeof(char));
-  strncpy(var, variable, strlen(variable));
-  set<char *, comp> *table = analyzer->tables->back();
-  table->insert(var);
+  string var = string{variable};
+  map<string, var_type> &table = *(analyzer->tables->back());
+  table[var] = type;
 }
 
 /**
@@ -63,7 +55,7 @@ void addToAnalyzer(analyzer_t *analyzer, char *variable)
 void addNewTable(analyzer_t *analyzer)
 {
   assert(analyzer != NULL);
-  analyzer->tables->push_back(new set<char *, comp>());
+  analyzer->tables->push_back(new map<string, var_type>());
 }
 
 /**
@@ -74,11 +66,7 @@ void addNewTable(analyzer_t *analyzer)
 void removeTopTable(analyzer_t *analyzer)
 {
   assert(analyzer != NULL);
-  set<char *, comp> *table = analyzer->tables->back();
-  for (char *variable : *(table))
-  {
-    free(variable);
-  }
+  map<string, var_type> *table = analyzer->tables->back();
   analyzer->tables->pop_back();
   delete (table);
 }
@@ -91,25 +79,26 @@ void removeTopTable(analyzer_t *analyzer)
  *
  * @return if any analyzer table contains variable return variable
  */
-bool searchAnalyzer(analyzer_t *analyzer, char *variable)
+var_type searchAnalyzer(analyzer_t *analyzer, char *variable)
 {
   assert(analyzer != NULL && analyzer->tables != NULL);
   assert(variable != NULL);
   // check blocks incrementally from most local to most global analyzer
   for (int i = analyzer->tables->size(); i > 0; i--)
   {
-    set<char *, comp> *table = analyzer->tables->at(i - 1);
+    map<string, var_type> *table = analyzer->tables->at(i - 1);
     if (auto search = table->find(variable); search != table->end())
     {
-      return true;
+      auto res = (*table->find(variable)).second;
+      return res;
     }
   }
-  return false;
+  return void_ty;
 }
 
 bool searchCall(analyzer_t *analyzer, char *call)
 {
-  set<char *, comp> *funcs = analyzer->funcs;
+  map<string, var_type> *funcs = analyzer->funcs;
   if (auto search = funcs->find(call); search != funcs->end())
   {
     return true;
@@ -117,11 +106,11 @@ bool searchCall(analyzer_t *analyzer, char *call)
   return false;
 }
 
-void addCall(analyzer_t *analyzer, char *call)
+void addCall(analyzer_t *analyzer, char *call, var_type type = void_ty)
 {
-  char *name = (char *)calloc(strlen(call) + 1, sizeof(char));
-  strncpy(name, call, strlen(call));
-  analyzer->funcs->insert(name);
+  string name = string{call};
+  map<string, var_type> &funcs = *(analyzer->funcs);
+  funcs[name] = type;
 }
 
 /**
@@ -132,17 +121,9 @@ void addCall(analyzer_t *analyzer, char *call)
 void deleteAnalyzer(analyzer_t *analyzer)
 {
   assert(analyzer != NULL);
-  for (set<char *, comp> *table : *(analyzer->tables))
+  for (map<string, var_type> *table : *(analyzer->tables))
   {
-    for (char *variable : *(table))
-    {
-      free(variable);
-    }
     delete (table);
-  }
-  for (char *call : *(analyzer->funcs))
-  {
-    free(call);
   }
   delete (analyzer->tables);
   delete (analyzer->funcs);
@@ -158,8 +139,10 @@ void analyze(analyzer_t *analyzer, astNode *tree)
   switch (tree->type)
   {
   case ast_prog:
-    analyze(analyzer, tree->prog.ext1);
-    analyze(analyzer, tree->prog.ext2);
+    for (astNode *ext : *tree->prog.exts)
+    {
+      analyze(analyzer, ext);
+    }
     analyze(analyzer, tree->prog.func);
     break;
   case ast_func:
@@ -171,7 +154,7 @@ void analyze(analyzer_t *analyzer, astNode *tree)
     {
       for (astNode *param : *tree->func.params)
       {
-        addToAnalyzer(analyzer, param->var.name);
+        addToAnalyzer(analyzer, param->var.name, param->var.type);
       }
     }
     analyze(analyzer, tree->func.body);
@@ -217,9 +200,10 @@ void analyze(analyzer_t *analyzer, astNode *tree)
       char *name = call.name;
       if (!searchCall(analyzer, name))
       {
-        cerr << "External call -> " << string{name} << endl;
+        cerr << "Unknows call -> " << string{name} << endl;
+        exit(1);
       }
-      else
+      if (tree->stmt.call.params != nullptr)
       {
         for (astNode *param : *tree->stmt.call.params)
         {
@@ -230,24 +214,36 @@ void analyze(analyzer_t *analyzer, astNode *tree)
       break;
     }
     case ast_decl:
-      if (searchAnalyzer(analyzer, tree->stmt.decl.name))
+      if (searchAnalyzer(analyzer, tree->stmt.decl.name) != void_ty)
       {
         cerr << "variable " << tree->stmt.decl.name << " is already declared" << endl;
         exit(1);
       }
-      addToAnalyzer(analyzer, tree->stmt.decl.name);
+      addToAnalyzer(analyzer, tree->stmt.decl.name, tree->stmt.decl.type);
       break;
     default:
       break;
     }
     break;
   case ast_var:
-    if (!searchAnalyzer(analyzer, tree->var.name))
+  {
+    if (!tree->var.declared)
     {
-      cerr << "variable " << tree->var.name << " is not declared" << endl;
-      exit(1);
+      var_type type = searchAnalyzer(analyzer, tree->var.name);
+      if (type == void_ty)
+      {
+        cerr << "variable " << tree->var.name << " is not declared" << endl;
+        exit(1);
+      }
+      if (tree->var.type != ptr_ty)
+      {
+        tree->var.type = type;
+      }
+    } else {
+       addToAnalyzer(analyzer, tree->var.name, tree->var.type);
     }
     break;
+  }
   case ast_bexpr:
     analyze(analyzer, tree->bexpr.lhs);
     analyze(analyzer, tree->bexpr.rhs);

@@ -57,12 +57,19 @@ typedef enum
 	uminus	// -: unary minus
 } op_type;
 
+typedef enum
+{
+	char_ty,
+	int_ty,
+	ptr_ty,
+	void_ty,
+} var_type;
+
 /* structs for different node types */
 
 typedef struct
 {
-	astNode *ext1; // extern function print
-	astNode *ext2; // extern function read
+	vector<astNode *> *exts; // extern functions
 	astNode *func; // function defined in input miniC program
 	char *name;
 } astProg;
@@ -70,7 +77,7 @@ typedef struct
 typedef struct
 {
 	char *name;			// name of the function
-	char *type;			// name of the function
+	var_type type;			// name of the function
 	vector<astNode *> *params; // parameter, possibly NULL if the function doesn't take a param
 	astNode *body;	// function body
 } astFunc;
@@ -78,16 +85,21 @@ typedef struct
 typedef struct
 {
 	char *name; // For extern functions defined we will only save function names
+	var_type type;
+	vector<var_type> *args;
 } astExtern;
 
 typedef struct
 {
 	char *name;
+	var_type type;
+	bool declared;
 } astVar;
 
 typedef struct
 {
 	int value; // For integer contants we will store the value of the constant
+	var_type type;
 } astConst;
 
 typedef struct
@@ -143,6 +155,7 @@ typedef struct
 typedef struct
 {
 	char *name;
+	var_type type;
 } astDecl;
 
 typedef struct
@@ -190,8 +203,8 @@ Declarations of create* functions for all the types of nodes
 defined above. All the create* functions return a astNode*.
 */
 
-astNode *createProg(astNode *extern1, astNode *extern2, astNode *func);
-astNode *createFunc(const char *name, const char *type, vector<astNode *> *params, astNode *body);
+astNode *createProg(vector<astNode *> *exts, astNode *func);
+astNode *createFunc(const char *name, var_type type, vector<astNode *> *params, astNode *body);
 astNode *createExtern(const char *name);
 astNode *createVar(const char *name);
 astNode *createCnst(int value);
@@ -211,7 +224,7 @@ astNode *createRet(astNode *expr);
 astNode *createBlock(vector<astNode *> *stmt_list);
 astNode *createWhile(astNode *cond, astNode *body);
 astNode *createIf(astNode *cond, astNode *if_body, astNode *else_body = NULL);
-astNode *createDecl(const char *decl);
+astNode *createDecl(const char *decl, var_type type);
 astNode *createAsgn(astNode *lhs, astNode *rhs);
 
 /*
