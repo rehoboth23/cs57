@@ -91,6 +91,7 @@ void eliminateCommonSubExpression(llvm::BasicBlock &basicBlock, bool &change)
 			break;
 		case llvm::Instruction::Alloca:
 		case llvm::Instruction::Br:
+		case llvm::Instruction::Call:
 			break;
 		default:
 			llvm::Value *op2Ref = op2 != nullptr ? op2 : op1;

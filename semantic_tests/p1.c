@@ -5,22 +5,17 @@ extern void printc(char);
 
 int main()
 {
-	// int a;
-	// int b;
-	// b  = 'c';
-	// char b;
-	// b = readc();
-	// print(a);
+	int a;
+	a = read();
 	int b = read();
-	if (b > 0)
+	if (read() - 2 > 3 * a - b)
 	{
+		print(a - 2);
 		while (b)
 		{
-			print(b);
+			print(b + a + 1);
 			b = b - 1;
 		}
 	}
-	else
-		print(b);
 	return 0;
 }

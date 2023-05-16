@@ -52,7 +52,7 @@ run:
 mem:
 	make all
 	$(MEM_CHECK) ./$(source).out semantic_tests/$(TEST).c $(TEST).ll
-	$(MEM_CHECK) ./$(TEST).out
+	# $(MEM_CHECK) ./$(TEST).out
 
 debug:
 	make all

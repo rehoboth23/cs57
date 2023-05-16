@@ -1,5 +1,6 @@
 #include "ast.h"
 #include <stdio.h>
+#include <iostream>
 #include <stdlib.h>
 #include <assert.h>
 #include <string.h>
@@ -28,7 +29,8 @@ void freeProg(astNode *node)
 {
 	assert(node != NULL && node->type == ast_prog);
 
-	for (astNode *ext: *node->prog.exts) {
+	for (astNode *ext : *node->prog.exts)
+	{
 		freeExtern(ext);
 	}
 	freeFunc(node->prog.func);
@@ -146,7 +148,7 @@ void freeCnst(astNode *node)
 }
 
 /*create and free functions for ast_rexpr type of node*/
-astNode *createRExpr(astNode *lhs, astNode *rhs, rop_type op)
+astNode *createRExpr(astNode *lhs, astNode *rhs, op_type op)
 {
 	astNode *node;
 	node = (astNode *)calloc(1, sizeof(astNode));
@@ -607,7 +609,6 @@ void printStmt(astStmt *stmt, int n)
 			{
 				printNode(param, n + 1);
 			}
-			
 		}
 		break;
 	}
@@ -670,4 +671,49 @@ void printStmt(astStmt *stmt, int n)
 	}
 	}
 	free(indent);
+}
+
+
+astNode* getExpr(astNode *lhs, string op, astNode *rhs)
+{
+	if (op == "+")
+	{
+		return createBExpr(lhs, rhs, add);
+	}
+	else if (op == "-")
+	{
+		return createBExpr(lhs, rhs, sub);
+	}
+	else if (op == "*")
+	{
+		return createBExpr(lhs, rhs, mul);
+	}
+	else if (op == "/")
+	{
+		return createBExpr(lhs, rhs, divide);
+	}
+	else if (op == "==")
+	{
+		return createRExpr(lhs, rhs, eq);
+	}
+	else if (op == "<")
+	{
+		return createRExpr(lhs, rhs, lt);
+	}
+	else if (op == ">")
+	{
+		return createRExpr(lhs, rhs, gt);
+	}
+	else if (op == "<=")
+	{
+		return createRExpr(lhs, rhs, le);
+	}
+	else if (op == ">=")
+	{
+		return createRExpr(lhs, rhs, ge);
+	} else if (op == "!=")
+	{
+		return createRExpr(lhs, rhs, neq);
+	}
+	return nullptr;
 }

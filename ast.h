@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <vector>
+#include <string>
 using namespace std;
 
 struct ast_Node;
@@ -38,15 +39,9 @@ typedef enum
 } stmt_type;
 
 // enum to identify op type in expressions
-typedef enum
-{
-	lt, // <
-	gt, // >
-	le, // <=
-	ge, // >=
-	eq, // ==
-	neq // !=
-} rop_type;
+// typedef enum
+// {
+// } op_type;
 
 typedef enum
 {
@@ -54,7 +49,13 @@ typedef enum
 	sub,		// -
 	divide, // /
 	mul,		// *
-	uminus	// -: unary minus
+	uminus,	// -: unary minus
+			lt, // <
+	gt,			// >
+	le,			// <=
+	ge,			// >=
+	eq,			// ==
+	neq			// !=
 } op_type;
 
 typedef enum
@@ -70,16 +71,16 @@ typedef enum
 typedef struct
 {
 	vector<astNode *> *exts; // extern functions
-	astNode *func; // function defined in input miniC program
+	astNode *func;					 // function defined in input miniC program
 	char *name;
 } astProg;
 
 typedef struct
 {
-	char *name;			// name of the function
-	var_type type;			// name of the function
+	char *name;								 // name of the function
+	var_type type;						 // name of the function
 	vector<astNode *> *params; // parameter, possibly NULL if the function doesn't take a param
-	astNode *body;	// function body
+	astNode *body;						 // function body
 } astFunc;
 
 typedef struct
@@ -106,7 +107,7 @@ typedef struct
 {
 	astNode *lhs;
 	astNode *rhs;
-	rop_type op;
+	op_type op;
 } astRExpr;
 
 typedef struct
@@ -208,7 +209,7 @@ astNode *createFunc(const char *name, var_type type, vector<astNode *> *params, 
 astNode *createExtern(const char *name);
 astNode *createVar(const char *name);
 astNode *createCnst(int value);
-astNode *createRExpr(astNode *lhs, astNode *rhs, rop_type op);
+astNode *createRExpr(astNode *lhs, astNode *rhs, op_type op);
 astNode *createBExpr(astNode *lhs, astNode *rhs, op_type op);
 astNode *createUExpr(astNode *expr, op_type op);
 
@@ -260,5 +261,8 @@ void freeStmt(astNode *);
 
 void printNode(astNode *, int indent = 0);
 void printStmt(astStmt *, int indent = 0);
+
+// op_type getROpType(char *rop);
+astNode* getExpr(astNode *lhs, string op, astNode *rhs);
 
 #endif

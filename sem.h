@@ -4,6 +4,7 @@
 #include <vector>
 #include <set>
 #include <string.h>
+#include <string>
 #include "ast.h"
 
 using namespace std;
@@ -31,5 +32,8 @@ void analyze(analyzer_t *analyzer, astNode *tree);
  * @param analyzer analyzer
  */
 void deleteAnalyzer(analyzer_t *analyzer);
+
+
+void fixExpr(astNode *&a, astNode *&b);
 
 #endif

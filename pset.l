@@ -49,46 +49,20 @@ empty 					^[ \t]*\n$
 "," {
 	return COMMA;
 }
-"*" {
+"*"|"/"|"+"|"-" {
 	// printf("%s", yytext);
-	return MUL;
-}
-"/" {
-	// printf("%s", yytext);
-	return DIV;
-}
-"-" {
-	// printf("%s", yytext);
-	return SUB;
-}
-"+" {
-	// printf("%s", yytext);
-	return ADD;
+	char *p=(char *)calloc(strlen(yytext)+1,sizeof(char));
+	strncpy(p, yytext, strlen(yytext));
+	yylval.vname = p;
+	return OP;
 }
 
-"<" {
+"!="|"=="|">="|"<="|">"|"<" {
 	// printf("%s", yytext);
-	return LT;
-}
-">" {
-	// printf("%s", yytext);
-	return GT;
-}
-"<=" {
-	// printf("%s", yytext);
-	return LTE;
-}
-">=" {
-	// printf("%s", yytext);
-	return GTE;
-}
-"==" {
-	// printf("%s", yytext);
-	return EQ;
-}
-"!=" {
-	// printf("%s", yytext);
-	return NEQ;
+	char *p=(char *)calloc(strlen(yytext)+1,sizeof(char));
+	strncpy(p, yytext, strlen(yytext));
+	yylval.vname = p;
+	return OP;
 }
 
 "(" {

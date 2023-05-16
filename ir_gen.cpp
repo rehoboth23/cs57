@@ -40,8 +40,10 @@ llvm::Type *getType(var_type type, llvm::IRBuilder<> &builder)
 }
 
 llvm::Value *parseExpression(llvm::IRBuilder<> &builder,
+														 llvm::Function *&llvmFunc,
 														 astNode *node, map<string, llvm::Value *> &allocaMap,
 														 map<string, llvm::Function *> &functionMap,
+														 llvm::Instruction *&top,
 														 bool load = true)
 {
 	assert(node);
@@ -61,7 +63,7 @@ llvm::Value *parseExpression(llvm::IRBuilder<> &builder,
 			{
 				for (astNode *param : *call.params)
 				{
-					args.push_back(parseExpression(builder, param, allocaMap, functionMap));
+					args.push_back(parseExpression(builder, llvmFunc, param, allocaMap, functionMap, top));
 				}
 			}
 			return builder.CreateCall(callFunc, args);
@@ -73,8 +75,8 @@ llvm::Value *parseExpression(llvm::IRBuilder<> &builder,
 	}
 	case ast_bexpr:
 	{
-		llvm::Value *lhs = parseExpression(builder, node->bexpr.lhs, allocaMap, functionMap);
-		llvm::Value *rhs = parseExpression(builder, node->bexpr.rhs, allocaMap, functionMap);
+		llvm::Value *lhs = parseExpression(builder, llvmFunc, node->bexpr.lhs, allocaMap, functionMap, top);
+		llvm::Value *rhs = parseExpression(builder, llvmFunc, node->bexpr.rhs, allocaMap, functionMap, top);
 		llvm::Instruction::BinaryOps op;
 
 		switch (node->bexpr.op)
@@ -98,7 +100,7 @@ llvm::Value *parseExpression(llvm::IRBuilder<> &builder,
 	}
 	case ast_uexpr:
 	{
-		llvm::Value *uexpr = parseExpression(builder, node->uexpr.expr, allocaMap, functionMap);
+		llvm::Value *uexpr = parseExpression(builder, llvmFunc, node->uexpr.expr, allocaMap, functionMap, top);
 		op_type op = node->uexpr.op;
 		switch (op)
 		{
@@ -125,7 +127,12 @@ llvm::Value *parseExpression(llvm::IRBuilder<> &builder,
 	{
 		if (node->var.declared)
 		{
-			allocaMap[string{node->var.name}] = builder.CreateAlloca(getType(node->var.type, builder), 0, nullptr, "");
+			allocaMap[string{node->var.name}] = builder.CreateAlloca(getType(node->var.type, builder), 0, nullptr, string{node->var.name});
+			if (allocaMap[string{node->var.name}])
+			{
+				top = &*llvmFunc->getEntryBlock().getFirstInsertionPt();
+				moveTop(top, ((llvm::Instruction *)allocaMap[string{node->var.name}]));
+			}
 		}
 		if (!load)
 		{
@@ -136,8 +143,8 @@ llvm::Value *parseExpression(llvm::IRBuilder<> &builder,
 	}
 	case ast_rexpr:
 	{
-		llvm::Value *lhs = parseExpression(builder, node->rexpr.lhs, allocaMap, functionMap);
-		llvm::Value *rhs = parseExpression(builder, node->rexpr.rhs, allocaMap, functionMap);
+		llvm::Value *lhs = parseExpression(builder, llvmFunc, node->rexpr.lhs, allocaMap, functionMap, top);
+		llvm::Value *rhs = parseExpression(builder, llvmFunc, node->rexpr.rhs, allocaMap, functionMap, top);
 		switch (node->rexpr.op)
 		{
 		case lt:
@@ -232,7 +239,7 @@ void generateIR(astNode *iNode, string output)
 				switch (node->stmt.type)
 				{
 				case ast_call:
-					parseExpression(builder, node, allocaMap, functionMap);
+					parseExpression(builder, llvmFunc, node, allocaMap, functionMap, top);
 					break;
 				case ast_block:
 				{
@@ -291,8 +298,8 @@ void generateIR(astNode *iNode, string output)
 				case ast_asgn:
 				{
 
-					llvm::Value *lhs = parseExpression(builder, node->stmt.asgn.lhs, allocaMap, functionMap, false);
-					llvm::Value *rhs = parseExpression(builder, node->stmt.asgn.rhs, allocaMap, functionMap);
+					llvm::Value *lhs = parseExpression(builder, llvmFunc, node->stmt.asgn.lhs, allocaMap, functionMap, top, false);
+					llvm::Value *rhs = parseExpression(builder, llvmFunc, node->stmt.asgn.rhs, allocaMap, functionMap, top);
 					builder.CreateStore(rhs, lhs, false);
 					break;
 				}
@@ -307,7 +314,7 @@ void generateIR(astNode *iNode, string output)
 					llvm::BasicBlock *prevBlock = builder.GetInsertBlock();
 					builder.CreateBr(cmpBB);
 					builder.SetInsertPoint(cmpBB);
-					llvm::Value *cond = parseExpression(builder, whileNode.cond, allocaMap, functionMap);
+					llvm::Value *cond = parseExpression(builder, llvmFunc, whileNode.cond, allocaMap, functionMap, top);
 					blockSuccessionMap[loopBlock] = make_tuple(finalBlock, cmpBB);
 					builder.CreateCondBr(cond, loopBlock, finalBlock);
 					if (blockSuccessionMap.find(prevBlock) != blockSuccessionMap.end())
@@ -322,7 +329,7 @@ void generateIR(astNode *iNode, string output)
 				case ast_if:
 				{
 					astIf ifNode = node->stmt.ifn;
-					llvm::Value *cond = parseExpression(builder, ifNode.cond, allocaMap, functionMap);
+					llvm::Value *cond = parseExpression(builder, llvmFunc, ifNode.cond, allocaMap, functionMap, top);
 					llvm::BasicBlock *finalBlock = nullptr;
 					llvm::BasicBlock *ifBlock = llvm::BasicBlock::Create(context, "", llvmFunc);
 					llvm::BasicBlock *elseBlock = nullptr;
@@ -352,7 +359,7 @@ void generateIR(astNode *iNode, string output)
 				break;
 				case ast_ret:
 				{
-					llvm::Value *retexpr = parseExpression(builder, node->stmt.ret.expr, allocaMap, functionMap);
+					llvm::Value *retexpr = parseExpression(builder, llvmFunc, node->stmt.ret.expr, allocaMap, functionMap, top);
 					if (blockSuccessionMap.find(builder.GetInsertBlock()) != blockSuccessionMap.end())
 					{
 						if (!retBlock)
@@ -443,5 +450,4 @@ void generateIR(astNode *iNode, string output)
 	ofstream ofs(output);
 	llvm::raw_os_ostream rosf(ofs);
 	module->print(rosf, nullptr);
-	delete module;
 }

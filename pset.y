@@ -22,21 +22,20 @@ astNode *root;
 	vector<var_type> *type_vec_ptr;
 }
 
-%token NEQ ADD SUB MUL DIV EXTERN RETURN COMMA PTR
-%token IF ELSE WHILE LT GT LTE GTE EQ
+%token EXTERN RETURN COMMA PTR
+%token IF ELSE WHILE
 %token <ival> NUM CHAR
-%token <vname> VAR TYPE
+%token <vname> VAR TYPE OP
 
 %type <type_vec_ptr> argTypes
 %type <node_vec_ptr>  statements exprs func_args externs
 %type <nptr> program func_arg ext function function_definition if_else loop variable_assignment
-%type <nptr> if_statment else_statement code_block statement variable_declaration assignment _assignment
-%type <nptr> function_call expr arithmetic condition parameter operand unary
+%type <nptr> if_statment else_statement code_block statement variable_declaration assignment
+%type <nptr> function_call parameter operand unary
 %type <var_ty> type
 
-%left MUL DIV
-%left ADD
-%right SUB
+%left SUB
+
 
 %nonassoc IFX
 %nonassoc ELSE
@@ -105,7 +104,7 @@ func_arg: type VAR {
 }
 
 // a loop (while) block
-loop: WHILE '(' expr ')' code_block {
+loop: WHILE '(' parameter ')' code_block {
 	astNode *cond = $3;
 	if(cond->type != ast_rexpr) {
 		astNode *tcnst = createCnst(0);
@@ -125,7 +124,7 @@ if_else: if_statment %prec IFX {
 				}
 
 // if statement
-if_statment: IF '(' expr ')' statement {
+if_statment: IF '(' parameter ')' statement {
 	astNode *cond = $3;
 	if(cond->type != ast_rexpr) {
 		astNode *tcnst = createCnst(0);
@@ -187,10 +186,10 @@ statement: assignment {
 					| code_block {
 						$$ = $1;
 					}
-					| RETURN '(' expr ')' ';' {
+					| RETURN '(' parameter ')' ';' {
 						$$ = createRet($3);
 					} 
-					| RETURN expr ';' {
+					| RETURN parameter ';' {
 						$$ = createRet($2);
 					} 
 					| variable_declaration {
@@ -212,16 +211,8 @@ variable_declaration: type VAR ';' {
 	free($2);
 }
 
-assignment: _assignment{
-	$$ = $1;
-}
-	| PTR _assignment {
-		$$ = $2;
-		$$->stmt.asgn.lhs->var.type = ptr_ty;
-	}
-
 // assignment to var
-_assignment: VAR '=' expr ';' {
+assignment: VAR '=' parameter ';' {
 						astNode *var = createVar($1);
 						$$ = createAsgn(var, $3);
 						free($1);
@@ -237,36 +228,24 @@ function_call: VAR '(' exprs ')' {
 								free($1);
 							}
 
-exprs: exprs COMMA expr {
+exprs: exprs COMMA parameter {
 			$$ = $1;
 			$$->push_back($3);
 		} 
-		| expr {
+		| parameter {
 			$$ = new vector<astNode*>();
 			$$->push_back($1);
 		} 
 
-expr: arithmetic {$$ = $1;}
-			| parameter  {$$ = $1;}
-			| condition  {$$ = $1;}
-			| function_call { $$ = $1;}
-
-// arithmetic operations
-arithmetic: parameter ADD parameter {$$ = createBExpr($1, $3, add);}
-					| parameter SUB parameter {$$ = createBExpr($1, $3, sub);}
-					| parameter MUL parameter {$$ = createBExpr($1, $3, mul);}
-					| parameter DIV parameter {$$ = createBExpr($1, $3, divide);}
-
-// condition operation
-condition: parameter EQ parameter {$$ = createRExpr($1, $3, eq);}
-					| parameter LT parameter {$$ = createRExpr($1, $3, lt);}
-					| parameter LTE parameter {$$ = createRExpr($1, $3, le);}
-					| parameter GT parameter {$$ = createRExpr($1, $3, gt);}
-					| parameter GTE parameter {$$ = createRExpr($1, $3, ge);}
-					| parameter NEQ parameter {$$ = createRExpr($1, $3, neq);}
-
 parameter: operand {$$ = $1;}
 					| unary {$$ = $1;}
+					| function_call { $$ = $1;}
+					| parameter OP operand {
+						$$ = getExpr($1, string{$2}, $3);
+						fixExpr($$, $$->type == ast_rexpr ? $$->rexpr.lhs: $$->bexpr.lhs);
+						// astNode *rp = fixExpr($$, $$->type == ast_rexpr ? $$->rexpr.rhs: $$->bexpr.rhs);
+						// $$ = fixExpr(lp, rp);
+					}
 
 // operand can be number or variable
 operand: NUM {
@@ -312,7 +291,7 @@ int main(int argc, char** argv){
 	root = nullptr;
 	yyparse();
 	if (root) {
-		// printNode(root);
+		printNode(root);
 		analyzer_t *analyzer = createAnalyzer();
 		analyze(analyzer, root);
 		deleteAnalyzer(analyzer);

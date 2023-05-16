@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
+#include <array>
+#include <functional>
 #include "sem.h"
 #include "ast.h"
 
@@ -239,8 +241,10 @@ void analyze(analyzer_t *analyzer, astNode *tree)
       {
         tree->var.type = type;
       }
-    } else {
-       addToAnalyzer(analyzer, tree->var.name, tree->var.type);
+    }
+    else
+    {
+      addToAnalyzer(analyzer, tree->var.name, tree->var.type);
     }
     break;
   }
@@ -257,5 +261,29 @@ void analyze(analyzer_t *analyzer, astNode *tree)
     break;
   default:
     break;
+  }
+}
+
+void fixExpr(astNode *&a, astNode *&b)
+{
+  if (a->type == ast_bexpr && b->type == ast_rexpr)
+  {
+    if (a->rexpr.lhs == b)
+    {
+      astNode *nb = createBExpr(b->rexpr.rhs, a->bexpr.rhs, a->bexpr.op);
+      astNode *na = createRExpr(b->rexpr.lhs, nb, b->rexpr.op);
+      a = na;
+      b = nb;
+    }
+  }
+  else if (a->type == ast_bexpr && a->bexpr.lhs->type == ast_bexpr && b->type == ast_bexpr && a->bexpr.lhs == b)
+  {
+    if ((a->bexpr.op == mul || a->bexpr.op == divide) && (b->bexpr.op != mul || b->bexpr.op != divide))
+    {
+      astNode *nb = createBExpr(b->bexpr.rhs, a->bexpr.rhs, a->bexpr.op);
+      astNode *na = createBExpr(b->bexpr.lhs, nb, b->bexpr.op);
+      a = na;
+      b = nb;
+    }
   }
 }
