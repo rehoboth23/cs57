@@ -266,17 +266,14 @@ void analyze(analyzer_t *analyzer, astNode *tree)
 
 void fixExpr(astNode *&a, astNode *&b)
 {
-  if (a->type == ast_bexpr && b->type == ast_rexpr)
+  if (a->type == ast_bexpr && b->type == ast_rexpr && a->rexpr.lhs == b)
   {
-    if (a->rexpr.lhs == b)
-    {
-      astNode *nb = createBExpr(b->rexpr.rhs, a->bexpr.rhs, a->bexpr.op);
-      astNode *na = createRExpr(b->rexpr.lhs, nb, b->rexpr.op);
-      a = na;
-      b = nb;
-    }
+    astNode *nb = createBExpr(b->rexpr.rhs, a->bexpr.rhs, a->bexpr.op);
+    astNode *na = createRExpr(b->rexpr.lhs, nb, b->rexpr.op);
+    a = na;
+    b = nb;
   }
-  else if (a->type == ast_bexpr && a->bexpr.lhs->type == ast_bexpr && b->type == ast_bexpr && a->bexpr.lhs == b)
+  else if (a->type == ast_bexpr && b->type == ast_bexpr && a->bexpr.lhs == b)
   {
     if ((a->bexpr.op == mul || a->bexpr.op == divide) && (b->bexpr.op != mul || b->bexpr.op != divide))
     {

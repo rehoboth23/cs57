@@ -108,6 +108,7 @@ typedef struct
 	astNode *lhs;
 	astNode *rhs;
 	op_type op;
+	bool is_parenthesis;
 } astRExpr;
 
 typedef struct
@@ -115,6 +116,7 @@ typedef struct
 	astNode *lhs;
 	astNode *rhs;
 	op_type op;
+	bool is_parenthesis;
 } astBExpr;
 
 typedef struct

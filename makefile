@@ -47,7 +47,7 @@ run:
 	make all
 	./$(source).out semantic_tests/$(TEST).c $(TEST).ll
 	clang -g main.c $(TEST).ll -o $(TEST).out
-	time ./$(TEST).out
+	# time ./$(TEST).out
 
 mem:
 	make all

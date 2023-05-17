@@ -186,9 +186,6 @@ statement: assignment {
 					| code_block {
 						$$ = $1;
 					}
-					| RETURN '(' parameter ')' ';' {
-						$$ = createRet($3);
-					} 
 					| RETURN parameter ';' {
 						$$ = createRet($2);
 					} 
@@ -242,22 +239,36 @@ parameter: operand {$$ = $1;}
 					| function_call { $$ = $1;}
 					| parameter OP operand {
 						$$ = getExpr($1, string{$2}, $3);
-						fixExpr($$, $$->type == ast_rexpr ? $$->rexpr.lhs: $$->bexpr.lhs);
-						// astNode *rp = fixExpr($$, $$->type == ast_rexpr ? $$->rexpr.rhs: $$->bexpr.rhs);
-						// $$ = fixExpr(lp, rp);
+						if ($1->type == ast_rexpr && !$1->rexpr.is_parenthesis || $1->type == ast_bexpr && !$1->bexpr.is_parenthesis) {
+							fixExpr($$, $$->type == ast_rexpr ? $$->rexpr.lhs: $$->bexpr.lhs);
+						}
+					}
+					| parameter OP '(' parameter ')' {
+						$$ = getExpr($1, string{$2}, $4);
+					}
+					| '(' parameter ')' {
+						$$ = $2;
+						if ($$->type == ast_rexpr) {
+							$$->rexpr.is_parenthesis = true;
+						} else if ($$->type == ast_bexpr) {
+							$$->bexpr.is_parenthesis = true;
+						}
 					}
 
 // operand can be number or variable
 operand: NUM {
 	$$ = createCnst($1);
 	$$->cnst.type = int_ty;
-} | VAR {
+} 
+| VAR {
 		$$ = createVar($1);
 		free($1);
-	} | CHAR {
+	} 
+| CHAR {
 		$$ = createCnst($1);
 		$$->cnst.type = char_ty;
-	} | PTR VAR {
+	} 
+| PTR VAR {
 		$$ = createVar($2);
 		$$->var.type = ptr_ty;
 		free($2);
