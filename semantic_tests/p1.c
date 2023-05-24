@@ -7,16 +7,10 @@ int main()
 {
 	int a;
 	a = read();
-	int b = read();
-	print(((a + b) * 2));
-	// if (read() - 2 > 3 * a - b)
-	// {
-	// 	print(a - 2);
-	// 	while (b)
-	// 	{
-	// 		print(b + a + 1);
-	// 		b = b - 1;
-	// 	}
-	// }
-	return 0;
+	if (a > 0) {
+		return(1);
+	} else if (a < 0) {
+		return(-4 - -2);
+	}
+	return(0);
 }

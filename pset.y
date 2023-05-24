@@ -287,8 +287,14 @@ type: TYPE {
 	$$ = ptr_ty;
 }
 
-// unary opwrations
-unary: SUB operand {$$ = createUExpr($2, uminus);}
+// unary operations
+unary: OP operand {
+	if (string{$1} == "-") {
+		$$ = createUExpr($2, uminus);
+	} else {
+		$$ = nullptr;
+	}
+}
 %%
 
 int main(int argc, char** argv){
