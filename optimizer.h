@@ -44,11 +44,5 @@
 
 using namespace std;
 
-#define prt(x)         \
-  if (x)               \
-  {                    \
-    printf("%s\n", x); \
-  }
-
 void optimizeModule(llvm::Module &module);
 #endif

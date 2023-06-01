@@ -19,10 +19,10 @@
 using namespace std;
 using namespace llvm;
 
-void log(string s)
+inline void log(string s)
 {
 #ifdef LOG
-	cout << s << endl;
+  cout << s << endl;
 #endif
 }
 

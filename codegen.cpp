@@ -20,6 +20,13 @@
 using namespace std;
 using namespace llvm;
 
+inline void log(string s)
+{
+#ifdef LOG
+  cout << s << endl;
+#endif
+}
+
 #ifdef ARMD
 map<int, string> regName = {
     {EBX, "r1"},
@@ -39,12 +46,12 @@ string apop = "pop";
 string apush = "push";
 #else
 map<int, string> regName = {
-    {EBX, "ebx"},
-    {ECX, "ecx"},
-    {EDX, "edx"},
-    {EAX, "eax"},
+    {EBX, "%ebx"},
+    {ECX, "%ecx"},
+    {EDX, "%edx"},
+    {EAX, "%eax"},
 };
-string intLit = "" << intLit ;
+string intLit = "$";
 string stackPointer = "%esp";
 string basePointer = "%ebp";
 string amov = "movl";
@@ -136,7 +143,7 @@ void printDirectives(ofstream &asmFileStream, functionDirectives directive, stri
   {
     asmFileStream << "\t.file \"" << inputFileName << "\"" << endl
                   << "\t.text" << endl
-                  << "\t.global " << functionName << endl
+                  << "\t.globl " << functionName << endl
                   << "\t.type " << functionName << ", @function" << endl;
   }
   else if (directive == PUSH_CALLER_EBP_UPDATE_EBP_TO_ESP)
@@ -262,7 +269,7 @@ void writeAsmFile(
           printDirectives(asmFileStream, PUSH_CALLER_EBP_UPDATE_EBP_TO_ESP, inputFileName, func.getName().str());
           if (offset != 0)
           {
-            asmFileStream << "\t" << asub << " " << intLit  << abs(offset) << ", " << stackPointer << "\t" << endl;
+            asmFileStream << "\t" << asub << " " << intLit << abs(offset) << ", " << stackPointer << "\t" << endl;
           }
         }
         count++;
@@ -271,7 +278,7 @@ void writeAsmFile(
           string instructionString;
           raw_string_ostream instructionStream(instructionString);
           inst.print(instructionStream);
-          // asmFileStream << "# " << instructionString << endl;
+          log("# " + instructionString);
 
           unsigned opCode = inst.getOpcode();
           Value *op1 = nullptr;
@@ -289,7 +296,7 @@ void writeAsmFile(
             ConstantInt *constOp = dyn_cast<ConstantInt>(op1);
             if (constOp != nullptr)
             {
-              asmFileStream << "\t" << amov << " " << intLit  << constOp->getSExtValue() << ", " << getRegisterName(EAX) << endl;
+              asmFileStream << "\t" << amov << " " << intLit << constOp->getSExtValue() << ", " << getRegisterName(EAX) << endl;
             }
             else
             {
@@ -320,7 +327,7 @@ void writeAsmFile(
               if (constOp != nullptr)
               {
                 int opOffset = offsetMap[op2];
-                asmFileStream << "\t" << amov << " " << intLit  << constOp->getSExtValue() << ", " << opOffset << "(" << basePointer << ")" << endl;
+                asmFileStream << "\t" << amov << " " << intLit << constOp->getSExtValue() << ", " << opOffset << "(" << basePointer << ")" << endl;
               }
               else if (regMap.find(op1) != regMap.end() && regMap[op1] != -1)
               {
@@ -352,7 +359,7 @@ void writeAsmFile(
               ConstantInt *constOp = dyn_cast<ConstantInt>(op);
               if (constOp != nullptr)
               {
-                asmFileStream << "\t" << apush << " " << intLit  << constOp->getSExtValue() << endl;
+                asmFileStream << "\t" << apush << " " << intLit << constOp->getSExtValue() << endl;
               }
               else if (regMap.find(op) != regMap.end() && regMap[op] != -1)
               {
@@ -370,10 +377,10 @@ void writeAsmFile(
             {
               asmFileStream << "\t" << aadd << " $4, " << stackPointer << endl;
             }
-            asmFileStream << "" << apop << " " << getRegisterName(EDX) << "" << endl
+            asmFileStream << "\t" << apop << " " << getRegisterName(EDX) << "" << endl
                           << "\t" << apop << " " << getRegisterName(ECX) << "" << endl
-                          << "\t " << apop << " " << getRegisterName(EBX) << "" << endl;
-            if (returnType->isVoidTy())
+                          << "\t" << apop << " " << getRegisterName(EBX) << "" << endl;
+            if (!returnType->isVoidTy())
             {
               if (regMap.find(&inst) != regMap.end() && regMap[&inst] != -1)
               {
@@ -441,7 +448,7 @@ void writeAsmFile(
             ConstantInt *constOp = dyn_cast<ConstantInt>(op1);
             if (constOp != nullptr)
             {
-              asmFileStream << "\t" << amov << " " << intLit  << constOp->getSExtValue() << ", " << getRegisterName(instReg) << endl;
+              asmFileStream << "\t" << amov << " " << intLit << constOp->getSExtValue() << ", " << getRegisterName(instReg) << endl;
             }
             else if (regMap.find(op1) != regMap.end() && regMap[op1] != -1)
             {
@@ -455,17 +462,17 @@ void writeAsmFile(
             if (constOp != nullptr)
             {
 
-              asmFileStream << "\t" << (opCode == Instruction::Add ? aadd :(opCode == Instruction::Sub ?asub :(opCode == Instruction::Mul ?amul :(acmp))))
-                            << " " << intLit  << constOp->getSExtValue() << ", " << getRegisterName(instReg) << endl;
+              asmFileStream << "\t" << (opCode == Instruction::Add ? aadd : (opCode == Instruction::Sub ? asub : (opCode == Instruction::Mul ? amul : (acmp))))
+                            << " " << intLit << constOp->getSExtValue() << ", " << getRegisterName(instReg) << endl;
             }
             else if (regMap.find(op2) != regMap.end() && regMap[op2] != -1)
             {
-              asmFileStream << "\t" << (opCode == Instruction::Add ? aadd : (opCode == Instruction::Sub ?asub :(opCode == Instruction::Mul ?amul :(acmp))))
+              asmFileStream << "\t" << (opCode == Instruction::Add ? aadd : (opCode == Instruction::Sub ? asub : (opCode == Instruction::Mul ? amul : (acmp))))
                             << " " << getRegisterName(regMap[op2]) << ", " << getRegisterName(instReg) << endl;
             }
             else
             {
-              asmFileStream << "\t" << (opCode == Instruction::Add ?aadd :(opCode == Instruction::Sub ?asub :(opCode == Instruction::Mul ?amul :(acmp))))
+              asmFileStream << "\t" << (opCode == Instruction::Add ? aadd : (opCode == Instruction::Sub ? asub : (opCode == Instruction::Mul ? amul : (acmp))))
                             << " " << offsetMap[op2] << "(" << basePointer << "), " << getRegisterName(instReg) << endl;
             }
             if (inMemory)

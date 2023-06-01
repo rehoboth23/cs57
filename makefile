@@ -50,10 +50,8 @@ codegen.o: codegen.cpp codegen.h
 run:
 	make all
 	./$(source).out semantic_tests/$(TEST).c $(TEST)
-	gcc main.c $(TEST).s -o $(TEST).out
-	
-	# clang -g main.c $(TEST).s -o $(TEST).out
-	# time ./$(TEST).out
+	gcc -m32 -g main.c $(TEST).s -o $(TEST).out
+	./$(TEST).out
 
 mem:
 	make all
@@ -71,6 +69,6 @@ clean:
 	rm -rf $(source).out y.output
 	rm -rf $(source).out y.output
 	rm -rf out*.c
-	rm -rf *.asm
+	rm -rf *.s
 	rm -rf *TRACE *.ll
 	rm -rf *.o *.gch *.out

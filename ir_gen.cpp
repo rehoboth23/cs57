@@ -459,9 +459,9 @@ void generateIR(astNode *iNode, string input, string output)
 	optimizeModule(*module);
 
 	// write optimized ll file
-	// ofstream ofs(output + ".ll");
-	// raw_os_ostream rosf(ofs);
-	// module->print(rosf, nullptr);
+	ofstream ofs(output + ".ll");
+	raw_os_ostream rosf(ofs);
+	module->print(rosf, nullptr);
 
 	codeGen(*module, input, output + ".s");
 }

@@ -3,7 +3,7 @@
 int func(int i);
 void print(char i)
 {
-	printf("%d", i);
+	printf("%d\n", i);
 }
 
 void printc(char c)
@@ -28,6 +28,6 @@ char readc()
 int main()
 {
 	int i = func(3);
-	printf("In main printing return value of test: %d\n", i);
+	// printf("In main printing return value of test: %d\n", i);
 	return 0;
 }
