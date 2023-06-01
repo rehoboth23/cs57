@@ -63,6 +63,43 @@ string apop = "popl";
 string apush = "pushl";
 #endif
 
+void generateAssemblyCode(Module &module, string asmFileName)
+{
+  // Get the target triple from the module
+  Triple triple(module.getTargetTriple());
+
+  // Get the target machine
+  string error;
+  const Target *target = TargetRegistry::lookupTarget(triple.getTriple(), error);
+  if (!target)
+  {
+    errs() << "Failed to lookup target: " << error << "\n";
+    return;
+  }
+
+  // Set target options
+  TargetOptions options;
+  options.MCOptions.AsmVerbose = true; // Enable verbose assembly output
+
+  // Create the target machine
+  TargetMachine *targetMachine = target->createTargetMachine(triple.getTriple(), "", "", options, None);
+  if (!targetMachine)
+  {
+    errs() << "Failed to create target machine\n";
+    return;
+  }
+  std::error_code ec;
+  llvm::raw_fd_ostream outputFile(asmFileName, ec);
+  if (ec) {
+    llvm::errs() << "Error opening file: " << ec.message();
+  }
+  legacy::PassManager passManager = legacy::PassManager();
+  targetMachine->addPassesToEmitFile(
+      passManager, outputFile, nullptr, CGFT_AssemblyFile);
+  passManager.run(module);
+  outputFile.flush();
+}
+
 Value *findSpill(map<Value *, int> regMap, vector<Value *> &valVec)
 {
   for (Value *&val : valVec)
@@ -491,9 +528,18 @@ void writeAsmFile(
 
 void codeGen(Module &module, string inputFileName, string asmFile)
 {
+  InitializeAllTargetInfos();
+  InitializeAllTargets();
+  InitializeAllTargetMCs();
+  InitializeAllAsmParsers();
+  InitializeAllAsmPrinters();
   string err;
   const string targetTriple = sys::getDefaultTargetTriple();
   module.setTargetTriple(targetTriple);
+#ifndef GEND
+  generateAssemblyCode(module, asmFile);
+  return;
+#endif
   map<Value *, map<Value *, int>> moduleRegMap;
   for (Function &function : module)
   {

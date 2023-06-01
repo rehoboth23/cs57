@@ -50,7 +50,7 @@ codegen.o: codegen.cpp codegen.h
 run:
 	make all
 	./$(source).out semantic_tests/$(TEST).c $(TEST)
-	gcc -m32 -g main.c $(TEST).s -o $(TEST).out
+	gcc -m64 -g main.c $(TEST).s -o $(TEST).out
 	./$(TEST).out
 
 mem:
