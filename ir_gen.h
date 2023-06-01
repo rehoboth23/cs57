@@ -15,9 +15,11 @@
 #include <string>
 #include <iostream>
 #include "ast.h"
+#include "optimizer.h"
+#include "codegen.h"
 
 using namespace std;
 
-void generateIR(astNode *node, string output);
+void generateIR(astNode *iNode, string input, string output);
 
 #endif

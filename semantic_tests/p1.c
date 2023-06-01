@@ -1,16 +1,18 @@
-extern void print(int);
 extern int read();
-extern char readc();
-extern void printc(char);
+extern void print(int);
 
-int main()
-{
+int func(int i){
 	int a;
-	a = read();
-	if (a > 0) {
-		return(1);
-	} else if (a < 0) {
-		return(-4 - -2);
+	int b;
+
+	a = 10;
+	
+	if (a+i < 100){
+		b = a + 100;
 	}
-	return(0);
+	else {
+		b = a + 20;
+	}
+
+	return(b);
 }

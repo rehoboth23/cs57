@@ -1,15 +1,14 @@
 #include <stdio.h>
 
-// int add(int, char);
-
+int func(int i);
 void print(char i)
 {
-	printf("-> %d\n", i);
+	printf("%d", i);
 }
 
 void printc(char c)
 {
-	printf("-> %c\n", c);
+	printf("%c", c);
 }
 
 int read()
@@ -26,9 +25,9 @@ char readc()
 	return c;
 }
 
-// int main()
-// {
-// 	int i = add(3, 'c');
-// 	printf("In main printing return value of test: %d\n", i);
-// 	return 0;
-// }
+int main()
+{
+	int i = func(3);
+	printf("In main printing return value of test: %d\n", i);
+	return 0;
+}

@@ -308,11 +308,11 @@ int main(int argc, char** argv){
 	root = nullptr;
 	yyparse();
 	if (root) {
-		printNode(root);
+		// printNode(root);
 		analyzer_t *analyzer = createAnalyzer();
 		analyze(analyzer, root);
 		deleteAnalyzer(analyzer);
-		generateIR(root, string{argv[2]});
+		generateIR(root, string{argv[1]}, string{argv[2]});
 		freeNode(root);
 	} else {
 		

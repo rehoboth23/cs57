@@ -1,5 +1,5 @@
 source = pset
-OBJS = optimizer.o ir_gen.o
+OBJS = optimizer.o ir_gen.o codegen.o
 TEST = p1
 OS := $(shell uname -s)
 CLANG = clang++ --std=c++2a
@@ -10,6 +10,7 @@ CDC=`llvm-config-15 --cxxflags --ldflags --libs core` -I/usr/include/llvm-c-15/ 
 DEBUGGER=gdb --args
 MEM_CHECK=valgrind --leak-check=full --show-leak-kinds=all
 else
+ARMD=-DARMD
 LDC=`llvm-config --cflags` -I /usr/include/llvm-c/
 CDC=`llvm-config --cxxflags --ldflags --libs core` -I /usr/include/llvm-c/
 DEBUGGER=lldb --
@@ -43,10 +44,15 @@ ir_gen.o: ir_gen.cpp ir_gen.h
 optimizer.o: optimizer.cpp optimizer.h
 	$(CLANG) $(LOGD) $(OPTD) -g $(LDC) -c optimizer.cpp -o $@
 
+codegen.o: codegen.cpp codegen.h
+	$(CLANG) $(ARMD) $(LOGD) $(OPTD) -g $(LDC) -c codegen.cpp -o $@
+
 run:
 	make all
-	./$(source).out semantic_tests/$(TEST).c $(TEST).ll
-	clang -g main.c $(TEST).ll -o $(TEST).out
+	./$(source).out semantic_tests/$(TEST).c $(TEST)
+	gcc main.c $(TEST).s -o $(TEST).out
+	
+	# clang -g main.c $(TEST).s -o $(TEST).out
 	# time ./$(TEST).out
 
 mem:
@@ -65,5 +71,6 @@ clean:
 	rm -rf $(source).out y.output
 	rm -rf $(source).out y.output
 	rm -rf out*.c
+	rm -rf *.asm
 	rm -rf *TRACE *.ll
 	rm -rf *.o *.gch *.out

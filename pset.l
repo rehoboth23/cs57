@@ -13,6 +13,16 @@ variable 				{letter}{alphanum_us}*
 number					[0-9]+
 empty 					^[ \t]*\n$
 %%
+
+"'"."'"|"'\\"."'" {
+	if (yytext[1] == '\\') {
+		yylval.ival = '\n';
+	} else {
+		yylval.ival = yytext[1];
+	}
+	return CHAR;
+}
+
 "//".*\n|"/*"(.*\n*.*)*"*/" {
 }
 
@@ -101,10 +111,6 @@ empty 					^[ \t]*\n$
 	printf("%s", yytext);
 	yylval.ival = atoi(yytext);
 	return NUM;
-}
-"'"({letter}|{number})"'" {
-	yylval.ival = yytext[1];
-	return CHAR;
 }
 %%
 

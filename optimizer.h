@@ -39,6 +39,7 @@
 #include <llvm/IR/Function.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/raw_os_ostream.h>
+#include <llvm/IR/User.h>
 #include "ast.h"
 
 using namespace std;

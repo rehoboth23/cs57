@@ -17,6 +17,7 @@
 #include "optimizer.h"
 
 using namespace std;
+using namespace llvm;
 
 void log(string s)
 {
@@ -25,51 +26,51 @@ void log(string s)
 #endif
 }
 
-void generateKillGen(set<llvm::Instruction *> &gen,
-										 set<llvm::Instruction *> &kill,
-										 map<llvm::Value *, set<llvm::Value *> *> &store,
-										 llvm::BasicBlock &block)
+void generateKillGen(set<Instruction *> &gen,
+										 set<Instruction *> &kill,
+										 map<Value *, set<Value *> *> &store,
+										 BasicBlock &block)
 {
-	for (llvm::Instruction &inst : block)
+	for (Instruction &inst : block)
 	{
 		unsigned opCode = inst.getOpcode();
-		if (opCode == llvm::Instruction::Store)
+		if (opCode == Instruction::Store)
 		{
 			gen.insert(&inst);
-			llvm::Value *op1 = inst.getOperand(0);
-			llvm::Value *op2 = inst.getOperand(1);
+			Value *op1 = inst.getOperand(0);
+			Value *op2 = inst.getOperand(1);
 			if (store[op2] != nullptr)
 			{
-				set<llvm::Value *> *killed = store[op2];
+				set<Value *> *killed = store[op2];
 				killed->insert(killed->begin(), killed->end());
 			}
-			store[op2] = new set<llvm::Value *>();
+			store[op2] = new set<Value *>();
 			store[op2]->insert(&inst);
 		}
 	}
 }
 
-string getInstructionString(llvm::Instruction &inst)
+string getInstructionString(Instruction &inst)
 {
 	string instStr;
-	llvm::raw_string_ostream(instStr) << inst;
+	raw_string_ostream(instStr) << inst;
 	return instStr;
 }
 
-void eliminateCommonSubExpression(llvm::BasicBlock &basicBlock, bool &change)
+void eliminateCommonSubExpression(BasicBlock &basicBlock, bool &change)
 {
-	map<pair<llvm::Value *, llvm::Value *>, pair<unsigned, llvm::Instruction *> *> commonSubexpressions;
-	map<llvm::Value *, vector<pair<llvm::Value *, llvm::Value *>> *> opTrace;
+	map<pair<Value *, Value *>, pair<unsigned, Instruction *> *> commonSubexpressions;
+	map<Value *, vector<pair<Value *, Value *>> *> opTrace;
 
-	for (llvm::Instruction &inst : basicBlock)
+	for (Instruction &inst : basicBlock)
 	{
 		unsigned opCode = inst.getOpcode();
 		if (inst.getNumOperands() == 0)
 		{
 			continue;
 		}
-		llvm::Value *op1 = inst.getOperand(0);
-		llvm::Value *op2 = nullptr;
+		Value *op1 = inst.getOperand(0);
+		Value *op2 = nullptr;
 
 		if (inst.getNumOperands() > 1)
 		{
@@ -77,7 +78,7 @@ void eliminateCommonSubExpression(llvm::BasicBlock &basicBlock, bool &change)
 		}
 		switch (opCode)
 		{
-		case llvm::Instruction::Store:
+		case Instruction::Store:
 			if (opTrace[op2] != nullptr)
 			{
 				for (auto &p : *(opTrace[op2]))
@@ -89,14 +90,14 @@ void eliminateCommonSubExpression(llvm::BasicBlock &basicBlock, bool &change)
 				opTrace.erase(op2);
 			}
 			break;
-		case llvm::Instruction::Alloca:
-		case llvm::Instruction::Br:
-		case llvm::Instruction::Call:
+		case Instruction::Alloca:
+		case Instruction::Br:
+		case Instruction::Call:
 			break;
 		default:
-			llvm::Value *op2Ref = op2 != nullptr ? op2 : op1;
-			pair<llvm::Value *, llvm::Value *> operands = make_pair(max(op1, op2Ref), min(op1, op2Ref));
-			pair<unsigned, llvm::Instruction *> *subExpr = commonSubexpressions[operands];
+			Value *op2Ref = op2 != nullptr ? op2 : op1;
+			pair<Value *, Value *> operands = make_pair(max(op1, op2Ref), min(op1, op2Ref));
+			pair<unsigned, Instruction *> *subExpr = commonSubexpressions[operands];
 			if (subExpr != nullptr && subExpr->first == opCode)
 			{
 				log(string{"CSE -> "} + getInstructionString(inst));
@@ -105,17 +106,17 @@ void eliminateCommonSubExpression(llvm::BasicBlock &basicBlock, bool &change)
 			}
 			else
 			{
-				commonSubexpressions[operands] = new pair<unsigned, llvm::Instruction *>(opCode, &inst);
+				commonSubexpressions[operands] = new pair<unsigned, Instruction *>(opCode, &inst);
 				if (opTrace[op1] == nullptr)
 				{
-					opTrace[op1] = new vector<pair<llvm::Value *, llvm::Value *>>();
+					opTrace[op1] = new vector<pair<Value *, Value *>>();
 				}
 				opTrace[op1]->push_back(operands);
 				if (op2 != NULL)
 				{
 					if (opTrace[op2] == nullptr)
 					{
-						opTrace[op2] = new vector<pair<llvm::Value *, llvm::Value *>>();
+						opTrace[op2] = new vector<pair<Value *, Value *>>();
 					}
 					opTrace[op2]->push_back(operands);
 				}
@@ -125,40 +126,40 @@ void eliminateCommonSubExpression(llvm::BasicBlock &basicBlock, bool &change)
 	}
 }
 
-void eliminateDeadCode(llvm::BasicBlock &basicBlock, bool &change)
+void eliminateDeadCode(BasicBlock &basicBlock, bool &change)
 {
-	set<llvm::Instruction *> toErase;
-	for (llvm::Instruction &inst : basicBlock)
+	set<Instruction *> toErase;
+	for (Instruction &inst : basicBlock)
 	{
 		unsigned opCode = inst.getOpcode();
-		bool check = (opCode != llvm::Instruction::Store &&
-									opCode != llvm::Instruction::Alloca &&
-									opCode != llvm::Instruction::Br &&
-									opCode != llvm::Instruction::Call &&
-									opCode != llvm::Instruction::Ret);
+		bool check = (opCode != Instruction::Store &&
+									opCode != Instruction::Alloca &&
+									opCode != Instruction::Br &&
+									opCode != Instruction::Call &&
+									opCode != Instruction::Ret);
 		if (inst.hasNUses(0) && check)
 		{
 			toErase.insert(&inst);
 			change = true;
 		}
 	}
-	for (llvm::Instruction *inst : toErase)
+	for (Instruction *inst : toErase)
 	{
 		log(string{"DE -> "} + getInstructionString(*inst));
 		inst->eraseFromParent();
 	}
 }
 
-void constantFolding(llvm::BasicBlock &basicBlock, bool &change)
+void constantFolding(BasicBlock &basicBlock, bool &change)
 {
-	for (llvm::Instruction &inst : basicBlock)
+	for (Instruction &inst : basicBlock)
 	{
 		if (inst.getNumOperands() == 0)
 		{
 			continue;
 		}
-		llvm::Value *op1 = inst.getOperand(0);
-		llvm::Value *op2 = nullptr;
+		Value *op1 = inst.getOperand(0);
+		Value *op2 = nullptr;
 		if (inst.getNumOperands() > 1)
 		{
 			op2 = inst.getOperand(1);
@@ -167,28 +168,28 @@ void constantFolding(llvm::BasicBlock &basicBlock, bool &change)
 		{
 			continue;
 		}
-		llvm::ConstantInt *const1 = dyn_cast<llvm::ConstantInt>(op1);
-		llvm::ConstantInt *const2 = dyn_cast<llvm::ConstantInt>(op2);
+		ConstantInt *const1 = dyn_cast<ConstantInt>(op1);
+		ConstantInt *const2 = dyn_cast<ConstantInt>(op2);
 		unsigned opCode = inst.getOpcode();
-		llvm::CmpInst::Predicate predicate;
+		CmpInst::Predicate predicate;
 		if (const1 && const2)
 		{
 			log(string{"CF  -> "} + getInstructionString(inst));
-			llvm::Constant *newInstruction = nullptr;
+			Constant *newInstruction = nullptr;
 			switch (opCode)
 			{
-			case llvm::Instruction::Add:
-				newInstruction = llvm::ConstantExpr::getAdd(const1, const2);
+			case Instruction::Add:
+				newInstruction = ConstantExpr::getAdd(const1, const2);
 				break;
-			case llvm::Instruction::Sub:
-				newInstruction = llvm::ConstantExpr::getSub(const1, const2);
+			case Instruction::Sub:
+				newInstruction = ConstantExpr::getSub(const1, const2);
 				break;
-			case llvm::Instruction::Mul:
-				newInstruction = llvm::ConstantExpr::getMul(const1, const2);
+			case Instruction::Mul:
+				newInstruction = ConstantExpr::getMul(const1, const2);
 				break;
-			case llvm::Instruction::ICmp:
-				predicate = llvm::cast<llvm::ICmpInst>(&inst)->getPredicate();
-				newInstruction = llvm::ConstantExpr::getICmp(predicate, const1, const2);
+			case Instruction::ICmp:
+				predicate = cast<ICmpInst>(&inst)->getPredicate();
+				newInstruction = ConstantExpr::getICmp(predicate, const1, const2);
 				break;
 			default:
 				break;
@@ -202,18 +203,18 @@ void constantFolding(llvm::BasicBlock &basicBlock, bool &change)
 	}
 }
 
-void constantPropagation(llvm::Function &func, bool &change)
+void constantPropagation(Function &func, bool &change)
 {
-	map<llvm::BasicBlock *, set<llvm::Instruction *>> kill, gen, ins, outs;
-	map<llvm::Value *, set<llvm::Value *> *> store;
+	map<BasicBlock *, set<Instruction *>> kill, gen, ins, outs;
+	map<Value *, set<Value *> *> store;
 
 	// generate kill gen
-	for (llvm::BasicBlock &block : func)
+	for (BasicBlock &block : func)
 	{
 		generateKillGen(gen[&block], kill[&block], store, block);
 		outs[&block] = gen[&block];
 	}
-	for (llvm::BasicBlock &block : func)
+	for (BasicBlock &block : func)
 	{
 		bool tempChange = true;
 		do
@@ -221,18 +222,18 @@ void constantPropagation(llvm::Function &func, bool &change)
 			tempChange = false;
 			// union of predecessor of block
 			for_each(
-					llvm::pred_begin(&block),
-					llvm::pred_end(&block),
-					[&ins, &outs, &block](llvm::BasicBlock *pred)
+					pred_begin(&block),
+					pred_end(&block),
+					[&ins, &outs, &block](BasicBlock *pred)
 					{
-						set<llvm::Instruction *> bOut = outs[pred];
+						set<Instruction *> bOut = outs[pred];
 						ins[&block].insert(bOut.begin(), bOut.end());
 					});
 
 			// difference of in and kill
-			set<llvm::Instruction *> oldOut = outs[&block];
-			set<llvm::Instruction *> diff;
-			for (llvm::Instruction *inst : ins[&block])
+			set<Instruction *> oldOut = outs[&block];
+			set<Instruction *> diff;
+			for (Instruction *inst : ins[&block])
 			{
 				if (kill[&block].find(inst) == kill[&block].end())
 				{
@@ -253,33 +254,32 @@ void constantPropagation(llvm::Function &func, bool &change)
 		} while (tempChange);
 	}
 
-	set<llvm::Instruction *> toErase;
-	for (llvm::BasicBlock &block : func)
+	set<Instruction *> toErase;
+	for (BasicBlock &block : func)
 	{
-		set<llvm::Instruction *> R = ins[&block];
-		for (llvm::Instruction &inst : block)
+		set<Instruction *> R = ins[&block];
+		for (Instruction &inst : block)
 		{
 			unsigned opCode = inst.getOpcode();
-			if (opCode == llvm::Instruction::Store)
+			if (opCode == Instruction::Store)
 			{
-				erase_if(R, [&inst](llvm::Instruction *x)
+				erase_if(R, [&inst](Instruction *x)
 								 { return x->getOperand(1) == inst.getOperand(1); });
 				R.insert(&inst);
 			}
-			if (opCode == llvm::Instruction::Load)
+			if (opCode == Instruction::Load)
 			{
-				llvm::ConstantInt *constVal = nullptr;
+				ConstantInt *constVal = nullptr;
 				bool replace{false};
 
 				for_each(R,
-								 [&inst, &constVal, &replace](llvm::Instruction *x)
+								 [&inst, &constVal, &replace](Instruction *x)
 								 {
-									 llvm::ConstantInt *constOp = dyn_cast<llvm::ConstantInt>(x->getOperand(0));
+									 ConstantInt *constOp = dyn_cast<ConstantInt>(x->getOperand(0));
 									 if (constOp != nullptr)
 									 {
 										 if (
-											constVal != nullptr && inst.getOperand(0) == x->getOperand(1) 
-											|| inst.getOperand(0) == x->getOperand(1))
+												 constVal != nullptr && inst.getOperand(0) == x->getOperand(1) || inst.getOperand(0) == x->getOperand(1))
 										 {
 											 constVal = constOp;
 											 replace = true;
@@ -292,26 +292,27 @@ void constantPropagation(llvm::Function &func, bool &change)
 								 });
 				if (constVal != nullptr && replace)
 				{
-					inst.replaceAllUsesWith((llvm::Value *)constVal);
+					inst.replaceAllUsesWith((Value *)constVal);
 					toErase.insert(&inst);
 				}
 			}
 		}
 	}
-	for_each(toErase, [](llvm::Instruction *inst)
-					 { inst->eraseFromParent(); });
+	for_each(toErase, [&change](Instruction *inst)
+					 { inst->eraseFromParent(); 
+					 change = true; });
 }
 
-void optimizeModule(llvm::Module &module)
+void optimizeModule(Module &module)
 {
-	for (llvm::Function &func : module.functions())
+	for (Function &func : module.functions())
 	{
 
 		bool change;
 		do
 		{
 			change = false;
-			for (llvm::BasicBlock &block : func)
+			for (BasicBlock &block : func)
 			{
 				eliminateCommonSubExpression(block, change);
 				eliminateDeadCode(block, change);
