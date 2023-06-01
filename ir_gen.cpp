@@ -177,8 +177,16 @@ void generateIR(astNode *iNode, string input, string output)
 		cerr << "Wrong type or astNode. Must begin with an ast_prog" << endl;
 		exit(1);
 	}
+	InitializeAllTargetInfos();
+  InitializeAllTargets();
+  InitializeAllTargetMCs();
+  InitializeAllAsmParsers();
+  InitializeAllAsmPrinters();
+  string err;
+  const string targetTriple = sys::getDefaultTargetTriple();
 	LLVMContext context;
 	Module *module = new Module("Prog", context);
+	module->setTargetTriple(targetTriple);
 	map<string, Function *> functionMap;
 	IRBuilder<> builder(context);
 	Instruction *top = nullptr;

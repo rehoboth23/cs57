@@ -528,14 +528,6 @@ void writeAsmFile(
 
 void codeGen(Module &module, string inputFileName, string asmFile)
 {
-  InitializeAllTargetInfos();
-  InitializeAllTargets();
-  InitializeAllTargetMCs();
-  InitializeAllAsmParsers();
-  InitializeAllAsmPrinters();
-  string err;
-  const string targetTriple = sys::getDefaultTargetTriple();
-  module.setTargetTriple(targetTriple);
 #ifndef GEND
   generateAssemblyCode(module, asmFile);
   return;

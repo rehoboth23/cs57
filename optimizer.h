@@ -40,6 +40,22 @@
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Support/raw_os_ostream.h>
 #include <llvm/IR/User.h>
+#include "llvm/Support/Host.h"
+#include "llvm/ADT/Triple.h"
+#include "llvm/ADT/Optional.h"
+#include "llvm/CodeGen/TargetPassConfig.h"
+#include "llvm/CodeGen/TargetSubtargetInfo.h"
+#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/IR/Module.h"
+#include "llvm/MC/TargetRegistry.h"
+#include "llvm/Target/TargetMachine.h"
+#include "llvm/Target/TargetOptions.h"
+#include "llvm/Support/Host.h"
+#include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/CodeGen.h"
+#include <llvm/Support/FileSystem.h>
+#include <llvm/IR/Verifier.h>
+#include <llvm/Support/TargetSelect.h>
 #include "ast.h"
 
 using namespace std;
