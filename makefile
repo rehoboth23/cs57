@@ -39,7 +39,7 @@ $(source).out: $(source).l $(source).y ast.h ast.c sem.h sem.cpp $(OBJS)
 	$(CLANG) -g $(CDC) $(OBJS) -o $(source).out lex.yy.c y.tab.c ast.c sem.cpp
 
 ir_gen.o: ir_gen.cpp ir_gen.h
-	$(CLANG) $(LOGD) $(OPTD) -g $(LDC) -c ir_gen.cpp -o $@
+	$(CLANG) $(ARMD) $(LOGD) $(OPTD) -g $(LDC) -c ir_gen.cpp -o $@
 
 optimizer.o: optimizer.cpp optimizer.h
 	$(CLANG) $(LOGD) $(OPTD) -g $(LDC) -c optimizer.cpp -o $@

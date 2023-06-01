@@ -14,6 +14,12 @@
 using namespace std;
 using namespace llvm;
 
+#ifdef ARMD
+string ARM_FUNC_PRE = "_";
+#else
+string ARM_FUNC_PRE = "";
+#endif
+
 void moveTop(Instruction *&top, Instruction *toMove)
 {
 	toMove->moveAfter(top);
@@ -57,7 +63,7 @@ Value *parseExpression(IRBuilder<> &builder,
 		{
 			astCall call = node->stmt.call;
 			string name = string{call.name};
-			Function *callFunc = functionMap[name];
+			Function *callFunc = functionMap[ARM_FUNC_PRE+name];
 			std::vector<Value *> args = {};
 			if (call.params)
 			{
@@ -203,8 +209,8 @@ void generateIR(astNode *iNode, string input, string output)
 		}
 	}
 	FunctionType *funcType = FunctionType::get(retType, argTypes, false);
-	Function *llvmFunc = Function::Create(funcType, Function::ExternalLinkage, func.name, module);
-	functionMap[string{func.name}] = llvmFunc;
+	Function *llvmFunc = Function::Create(funcType, Function::ExternalLinkage, ARM_FUNC_PRE+string{func.name}, module);
+	functionMap[ARM_FUNC_PRE+string{func.name}] = llvmFunc;
 	vector<astNode *> nodeStack{func.body};
 	for (astNode *ext : *prog.exts)
 	{
@@ -239,8 +245,8 @@ void generateIR(astNode *iNode, string input, string output)
 				}
 				Type *extRetType = getType(node->ext.type, builder);
 				FunctionType *extType = FunctionType::get(extRetType, extArgTypes, false);
-				Function *extFunc = Function::Create(extType, Function::ExternalLinkage, name, module);
-				functionMap[name] = extFunc;
+				Function *extFunc = Function::Create(extType, Function::ExternalLinkage, ARM_FUNC_PRE+name, module);
+				functionMap[ARM_FUNC_PRE+name] = extFunc;
 				break;
 			}
 			case ast_stmt:
