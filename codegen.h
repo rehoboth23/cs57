@@ -22,6 +22,7 @@
 #include "optimizer.h"
 #include "llvm/Support/Host.h"
 #include "llvm/ADT/Triple.h"
+#include "llvm/ADT/Optional.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/IR/LegacyPassManager.h"

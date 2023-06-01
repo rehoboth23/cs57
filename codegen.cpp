@@ -82,7 +82,7 @@ void generateAssemblyCode(Module &module, string asmFileName)
   options.MCOptions.AsmVerbose = true; // Enable verbose assembly output
 
   // Create the target machine
-  TargetMachine *targetMachine = target->createTargetMachine(triple.getTriple(), "", "", options, None);
+  TargetMachine *targetMachine = target->createTargetMachine(triple.getTriple(), "", "", options, Optional<Reloc::Model>());
   if (!targetMachine)
   {
     errs() << "Failed to create target machine\n";
